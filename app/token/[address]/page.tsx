@@ -32,6 +32,7 @@ import {
 } from "@/lib/demo";
 import { DEPLOYMENT } from "@/lib/deployment";
 import { explorerAddress, loadLiveToken } from "@/lib/onchain";
+import { getTokenMeta, mergeTokenMeta, saveTokenMeta } from "@/lib/tokenMeta";
 import {
   buyOnCurve,
   connectWallet,
@@ -76,20 +77,43 @@ function TokenAvatar({
 
 function SocialLinks({ token }: { token: Pick<LaunchToken, "website" | "twitter" | "telegram"> }) {
   const items = [
-    { href: normalizeUrl(token.website), label: "web" },
-    { href: normalizeUrl(token.twitter), label: "x" },
-    { href: normalizeUrl(token.telegram), label: "tg" },
+    { href: normalizeUrl(token.website), label: "website", short: "web" },
+    { href: normalizeUrl(token.twitter), label: "x / twitter", short: "x" },
+    { href: normalizeUrl(token.telegram), label: "telegram", short: "tg" },
   ].filter((x) => x.href);
-  if (!items.length) return null;
+  if (!items.length) {
+    return <div className="socials empty-socials">no social links</div>;
+  }
   return (
     <div className="socials">
       {items.map((x) => (
-        <a key={x.label} href={x.href} target="_blank" rel="noreferrer">
-          {x.label}
+        <a key={x.short} href={x.href} target="_blank" rel="noreferrer" title={x.label}>
+          {x.short}
         </a>
       ))}
     </div>
   );
+}
+
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      return true;
+    } catch {
+      return false;
+    }
+  }
 }
 
 function chartPath(t: LaunchToken) {
@@ -126,6 +150,12 @@ export default function TokenPage() {
   const [tradeBusy, setTradeBusy] = useState(false);
   const [walletBusy, setWalletBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [metaOpen, setMetaOpen] = useState(false);
+  const [metaDesc, setMetaDesc] = useState("");
+  const [metaWeb, setMetaWeb] = useState("");
+  const [metaX, setMetaX] = useState("");
+  const [metaTg, setMetaTg] = useState("");
 
   const me = (wallet || "").toLowerCase();
 
@@ -147,12 +177,17 @@ export default function TokenPage() {
             name: "Unknown",
             symbol: "???",
           } as LaunchToken);
-        setToken(demo);
+        const merged = mergeTokenMeta(demo) as LaunchToken;
+        setToken(merged);
+        setMetaDesc(merged.description || "");
+        setMetaWeb(merged.website || "");
+        setMetaX(merged.twitter || "");
+        setMetaTg(merged.telegram || "");
       } else {
         const t = await loadLiveToken(address);
         if (!t) {
           // still show shell with address so URL works
-          setToken({
+          const shell = {
             address,
             name: "Token",
             symbol: shortAddr(address, 2).replace("…", "").toUpperCase() || "TKN",
@@ -164,7 +199,7 @@ export default function TokenPage() {
             vol24h: 0,
             holders: 0,
             progress: 0,
-            status: "live",
+            status: "live" as const,
             price: 0,
             change24h: 0,
             description: "Token not found in factory registry (yet)",
@@ -173,10 +208,21 @@ export default function TokenPage() {
             platformFeesEarned: 0,
             imageHue: 160,
             imageUrl: placeholderImage(address, 160),
-          });
+          };
+          const merged = mergeTokenMeta(shell) as LaunchToken;
+          setToken(merged);
+          setMetaDesc(merged.description || "");
+          setMetaWeb(merged.website || "");
+          setMetaX(merged.twitter || "");
+          setMetaTg(merged.telegram || "");
           setErr("token not indexed on this factory — check address");
         } else {
-          setToken(t);
+          const merged = mergeTokenMeta(t) as LaunchToken;
+          setToken(merged);
+          setMetaDesc(merged.description || "");
+          setMetaWeb(merged.website || "");
+          setMetaX(merged.twitter || "");
+          setMetaTg(merged.telegram || "");
         }
       }
     } catch (e) {
@@ -365,6 +411,45 @@ export default function TokenPage() {
     }
   }
 
+
+  async function onCopy(label: string, value: string) {
+    const ok = await copyText(value);
+    if (ok) {
+      setCopied(label);
+      setMsg(`copied ${label}`);
+      setTimeout(() => setCopied((cur) => (cur === label ? null : cur)), 1500);
+    } else {
+      setMsg("copy failed");
+    }
+  }
+
+  function saveMeta() {
+    if (!token) return;
+    saveTokenMeta({
+      address: token.address,
+      name: token.name,
+      symbol: token.symbol,
+      description: metaDesc.trim(),
+      website: metaWeb.trim(),
+      twitter: metaX.trim(),
+      telegram: metaTg.trim(),
+      imageUrl: token.imageUrl,
+    });
+    setToken((prev) =>
+      prev
+        ? {
+            ...prev,
+            description: metaDesc.trim(),
+            website: metaWeb.trim(),
+            twitter: metaX.trim(),
+            telegram: metaTg.trim(),
+          }
+        : prev
+    );
+    setMetaOpen(false);
+    setMsg("token info saved");
+  }
+
   const tradePreview =
     side === "buy"
       ? feeSplit(Number(tradeAmt) || 0)
@@ -431,22 +516,91 @@ export default function TokenPage() {
           <div className="card">
             <div className="head">
               <TokenAvatar token={token} size={48} />
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <h2>{token.name}</h2>
-                <div className="meta mono">
-                  ${token.symbol} ·{" "}
+                <div className="meta mono ca-row">
+                  <span>${token.symbol}</span>
+                  <span className="dot">·</span>
                   <a href={explorerAddress(token.address)} target="_blank" rel="noreferrer">
                     {shortAddr(token.address, 5)}
                   </a>
+                  <button
+                    type="button"
+                    className="copy-btn"
+                    onClick={() => onCopy("CA", token.address)}
+                    title="Copy contract address"
+                  >
+                    {copied === "CA" ? "copied" : "copy CA"}
+                  </button>
                 </div>
                 <SocialLinks token={token} />
               </div>
-              <span className={`tag ${token.status === "graduated" ? "grad" : "live"}`}>
-                {token.status === "graduated" ? "grad" : "live"}
-              </span>
+              <div className="head-right">
+                <span className={`tag ${token.status === "graduated" ? "grad" : "live"}`}>
+                  {token.status === "graduated" ? "DEX" : "curve"}
+                </span>
+                <button type="button" className="btn" onClick={() => setMetaOpen((v) => !v)}>
+                  {metaOpen ? "close" : "edit info"}
+                </button>
+              </div>
             </div>
 
-            {token.description && <p className="sub">{token.description}</p>}
+            <div className={`status-banner ${token.status === "graduated" ? "ok" : "warn"}`}>
+              {token.status === "graduated" ? (
+                <>
+                  <b>DEX live</b> — pool on DYOR. Snipers / BasedBot can buy via router.
+                </>
+              ) : (
+                <>
+                  <b>Bonding curve only</b> — not on DYOR yet. Bots that need a V2 pair will say
+                  “not tradeable”. Trade here on LPX until raise hits {fmtUsd(GRAD_TARGET)}, then LP
+                  locks on DYOR automatically.
+                </>
+              )}
+            </div>
+
+            <div className="desc-box">
+              <div className="desc-label">description</div>
+              <p className="desc-text">
+                {token.description?.trim()
+                  ? token.description
+                  : "No description yet. Use edit info to add one."}
+              </p>
+            </div>
+
+            {metaOpen && (
+              <div className="meta-edit card-inset">
+                <div className="field">
+                  <label>description</label>
+                  <textarea
+                    value={metaDesc}
+                    onChange={(e) => setMetaDesc(e.target.value)}
+                    placeholder="What is this token?"
+                  />
+                </div>
+                <div className="two">
+                  <div className="field">
+                    <label>website</label>
+                    <input value={metaWeb} onChange={(e) => setMetaWeb(e.target.value)} placeholder="https://" />
+                  </div>
+                  <div className="field">
+                    <label>x / twitter</label>
+                    <input value={metaX} onChange={(e) => setMetaX(e.target.value)} placeholder="https://x.com/..." />
+                  </div>
+                </div>
+                <div className="field">
+                  <label>telegram</label>
+                  <input value={metaTg} onChange={(e) => setMetaTg(e.target.value)} placeholder="https://t.me/..." />
+                </div>
+                <button className="btn green" type="button" onClick={saveMeta}>
+                  save info
+                </button>
+                <p className="sub" style={{ marginBottom: 0, marginTop: 8 }}>
+                  Stored in this browser for now (not on-chain metadata yet).
+                </p>
+              </div>
+            )}
+
             {err && <div className="note">{err}</div>}
 
             <div className="stats4">
@@ -491,26 +645,47 @@ export default function TokenPage() {
 
             <div className="lines" style={{ marginTop: 12 }}>
               <div className="ln">
-                <span>contract</span>
-                <b className="mono">
+                <span>contract (CA)</span>
+                <b className="mono row-actions">
                   <a href={explorerAddress(token.address)} target="_blank" rel="noreferrer">
                     {shortAddr(token.address, 6)}
                   </a>
+                  <button type="button" className="copy-btn" onClick={() => onCopy("CA", token.address)}>
+                    {copied === "CA" ? "copied" : "copy"}
+                  </button>
                 </b>
               </div>
               {token.curve && (
                 <div className="ln">
-                  <span>curve</span>
-                  <b className="mono">
+                  <span>bonding curve</span>
+                  <b className="mono row-actions">
                     <a href={explorerAddress(token.curve)} target="_blank" rel="noreferrer">
                       {shortAddr(token.curve, 6)}
                     </a>
+                    <button type="button" className="copy-btn" onClick={() => onCopy("curve", token.curve!)}>
+                      {copied === "curve" ? "copied" : "copy"}
+                    </button>
                   </b>
                 </div>
               )}
               <div className="ln">
                 <span>creator</span>
-                <b className="mono">{shortAddr(token.creator, 4)}</b>
+                <b className="mono row-actions">
+                  {shortAddr(token.creator, 4)}
+                  <button type="button" className="copy-btn" onClick={() => onCopy("creator", token.creator)}>
+                    {copied === "creator" ? "copied" : "copy"}
+                  </button>
+                </b>
+              </div>
+              <div className="ln">
+                <span>market</span>
+                <b>{token.status === "graduated" ? "DYOR pair" : "LPX bonding curve"}</b>
+              </div>
+              <div className="ln">
+                <span>socials</span>
+                <b>
+                  <SocialLinks token={token} />
+                </b>
               </div>
             </div>
           </div>

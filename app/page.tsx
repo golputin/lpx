@@ -38,6 +38,7 @@ import {
 } from "@/lib/demo";
 import { DEPLOYMENT } from "@/lib/deployment";
 import { explorerAddress, loadLiveTokens } from "@/lib/onchain";
+import { saveTokenMeta } from "@/lib/tokenMeta";
 import type { BrowserProvider } from "ethers";
 import {
   buyOnCurve,
@@ -519,6 +520,18 @@ function HomePageInner() {
             symbol: symbol.trim().toUpperCase(),
             firstBuy: Number(firstBuy) || 0,
           });
+          if (res.token) {
+            saveTokenMeta({
+              address: res.token,
+              name: name.trim(),
+              symbol: symbol.trim().toUpperCase(),
+              description: desc.trim(),
+              website: normalizeUrl(website),
+              twitter: normalizeUrl(twitter),
+              telegram: normalizeUrl(telegram),
+              imageUrl: logoData || undefined,
+            });
+          }
           const live = await loadLiveTokens();
           if (live.length) setTokens(live);
           setActivity((prev) => [
@@ -537,6 +550,9 @@ function HomePageInner() {
           setName("");
           setSymbol("");
           setDesc("");
+          setWebsite("");
+          setTwitter("");
+          setTelegram("");
           clearLogo();
           if (res.token) openToken(res.token.toLowerCase());
           await refreshBalances(wallet, provider, null);
@@ -560,6 +576,16 @@ function HomePageInner() {
         website: normalizeUrl(website),
         twitter: normalizeUrl(twitter),
         telegram: normalizeUrl(telegram),
+      });
+      saveTokenMeta({
+        address: t.address,
+        name: t.name,
+        symbol: t.symbol,
+        description: t.description,
+        website: t.website,
+        twitter: t.twitter,
+        telegram: t.telegram,
+        imageUrl: t.imageUrl,
       });
       setTokens((prev) => [t, ...prev]);
       const ts = Math.floor(Date.now() / 1000);
