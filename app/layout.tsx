@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "StableBox — Mystery Boxes on Stable",
-  description: "Open SBOX mystery boxes. Win random USDT prizes on Stable Network.",
+  title: "LPX Arcade — Play free on Stable",
+  description:
+    "Free-to-play degen arcade on Stable Network. Paper Crash, leaderboards, and the LPX meme terminal. No deposit required.",
   icons: { icon: "/logo.svg" },
 };
 

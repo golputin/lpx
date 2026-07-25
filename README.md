@@ -1,61 +1,38 @@
-# StableBox
+# LPX Arcade
 
-Mystery box dApp on **Stable Network (chain 988)**.
+Free-to-play degen arcade for **Stable Network (988)**.
 
-Pay **0.5 SBOX** (~$0.50) → open a box → receive random **USDT** prize.
+No deposit. No prize pool. No mystery-box bankroll.
 
-## Odds
+## What's live
 
-| Prize | Chance |
-|------:|-------:|
-| **$0.25** USDT | **90%** |
-| **$1.00** USDT | **9%** |
-| **$5.00** USDT | **1%** |
+- **Paper Crash** — cash out before the multiplier dumps
+- **Leaderboard** — best cash-out multiplier (browser local for now)
+- **Token page** — clean TBA slot for `$LPX` when you launch
 
-Expected prize ≈ **$0.365** USDT per open.
+## Why this model
 
-> Paid mystery-box game — not an investment product.
+Same *retention idea* as Fefer Arcade (play free → flex score → token culture),
+but **not a Win98/dino clone**: neon crash terminal, one flagship game, ship fast, **$0 treasury**.
 
-## Repo layout
-
-- **Root** — Next.js website (Vercel deploys this)
-- **`onchain/`** — Hardhat contracts (`SBOX`, `MysteryBox`), tests, deploy script
-
-## Frontend (Vercel)
+## Dev
 
 ```bash
 npm install
-npm run dev   # http://localhost:3007
+npm run dev    # :3007
 npm run build
 ```
 
-Env (after contract deploy):
+## Env (optional)
 
 ```bash
-NEXT_PUBLIC_SBOX=0x...
-NEXT_PUBLIC_BOX=0x...
-NEXT_PUBLIC_PRIZE=0x817997ca8394e26cce3de3a076a4889b27dbf9de
+NEXT_PUBLIC_TOKEN_CA=0x...
+NEXT_PUBLIC_BUY_URL=https://...
+NEXT_PUBLIC_X_URL=https://x.com/...
+NEXT_PUBLIC_TG_URL=https://t.me/...
 ```
 
-Without those env vars, the site runs in **DEMO mode**.
+## On-chain contracts
 
-## Contracts
-
-```bash
-cd onchain
-npm install
-npm test
-npm run compile
-
-export PRIVATE_KEY=0x...
-export PRIZE_TOKEN=0x817997ca8394e26cce3de3a076a4889b27dbf9de
-npm run deploy:stable
-```
-
-Then `fundPool` with USDT/WgUSDT.
-
-## Odds detail
-
-- 90% → 0.25 USDT  
-- 9% → 1 USDT  
-- 1% → 5 USDT  
+Hardhat / old StableBox contracts remain under `onchain/` for later if needed.
+They are **not** required for the arcade site.
