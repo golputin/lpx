@@ -26,6 +26,22 @@ export const PLATFORM_FEE_BPS = Math.round((TRADE_FEE_BPS * PLATFORM_SHARE_BPS) 
 
 export const GRAD_TARGET = 20_000;
 
+/**
+ * Create cost model (Pons / pump-style):
+ * - No platform create fee
+ * - User pays network gas only
+ * - Optional first buy is separate capital, not a fee
+ */
+export const CREATE_PLATFORM_FEE_USD = 0;
+/** rough Stable createPair gas envelope used by similar launchpads */
+export const CREATE_GAS_UNITS = 3_500_000;
+/** observed Stable base ~1 gwei; keep a small buffer for UI estimate */
+export const CREATE_GAS_PRICE_GWEI = 1.2;
+/** Stable gas token is cheap; treat estimate in USD-ish for UI copy */
+export const CREATE_GAS_TOKEN_USD = 1;
+export const CREATE_GAS_EST_USD =
+  (CREATE_GAS_UNITS * CREATE_GAS_PRICE_GWEI * 1e-9) * CREATE_GAS_TOKEN_USD;
+
 export const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY || "";
 export const DEMO_MODE = !FACTORY_ADDRESS;
 
@@ -42,6 +58,8 @@ export function fmt(n: number, d = 2) {
 }
 
 export function fmtUsd(n: number, d = 2) {
+  if (!Number.isFinite(n)) return "$0";
+  if (Math.abs(n) > 0 && Math.abs(n) < 0.01) return `$${n.toFixed(4)}`;
   return `$${fmt(n, d)}`;
 }
 
@@ -67,4 +85,29 @@ export function feeSplit(amount: number) {
   const creator = (total * CREATOR_SHARE_BPS) / 10_000;
   const platform = total - creator;
   return { total, creator, platform };
+}
+
+export function normalizeUrl(raw?: string | null) {
+  const v = (raw || "").trim();
+  if (!v) return "";
+  if (/^https?:\/\//i.test(v)) return v;
+  if (v.startsWith("x.com/") || v.startsWith("twitter.com/") || v.startsWith("t.me/")) {
+    return `https://${v}`;
+  }
+  if (v.startsWith("@")) return `https://x.com/${v.slice(1)}`;
+  if (/^[a-z0-9.-]+\.[a-z]{2,}/i.test(v)) return `https://${v}`;
+  return v;
+}
+
+export function createCostBreakdown(firstBuy = 0) {
+  const platformFee = CREATE_PLATFORM_FEE_USD;
+  const gasEst = CREATE_GAS_EST_USD;
+  const buy = Math.max(0, Number(firstBuy) || 0);
+  return {
+    platformFee,
+    gasEst,
+    firstBuy: buy,
+    totalCash: platformFee + buy,
+    totalWithGas: platformFee + gasEst + buy,
+  };
 }

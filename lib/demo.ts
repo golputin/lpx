@@ -25,6 +25,11 @@ export type LaunchToken = {
   creatorFeesEarned: number;
   platformFeesEarned: number;
   imageHue: number;
+  /** data URL or remote image */
+  imageUrl?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
 };
 
 export type Activity = {
@@ -48,8 +53,35 @@ function feesFromVol(vol: number) {
   return { creator: s.creator, platform: s.platform };
 }
 
+/** deterministic placeholder art so trenches don't look empty */
+export function placeholderImage(seed: string, hue = 160) {
+  const safe = encodeURIComponent(seed.slice(0, 24) || "lpx");
+  // dicebear shapes — no API key, good enough for demo logos
+  return `https://api.dicebear.com/9.x/shapes/svg?seed=${safe}&backgroundColor=${hue
+    .toString(16)
+    .padStart(2, "0")}${((hue * 3) % 255).toString(16).padStart(2, "0")}${((hue * 7) % 255)
+    .toString(16)
+    .padStart(2, "0")}`;
+}
+
+function tok(
+  partial: Omit<LaunchToken, "creatorFeesEarned" | "platformFeesEarned" | "imageUrl"> & {
+    volForFees: number;
+    imageUrl?: string;
+  }
+): LaunchToken {
+  const f = feesFromVol(partial.volForFees);
+  const { volForFees: _v, ...rest } = partial;
+  return {
+    ...rest,
+    creatorFeesEarned: f.creator,
+    platformFeesEarned: f.platform,
+    imageUrl: partial.imageUrl || placeholderImage(partial.symbol + partial.address, partial.imageHue),
+  };
+}
+
 export const DEMO_TOKENS: LaunchToken[] = [
-  {
+  tok({
     address: addr(0x1111),
     name: "Stable Signal",
     symbol: "SIG",
@@ -64,13 +96,13 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.0000184,
     change24h: 42.5,
     description: "Signal desk for Stable flow.",
-    ...(() => {
-      const f = feesFromVol(12600);
-      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
-    })(),
     imageHue: 168,
-  },
-  {
+    website: "https://lpx-tau.vercel.app",
+    twitter: "https://x.com/stable",
+    telegram: "https://t.me/stable",
+    volForFees: 12600,
+  }),
+  tok({
     address: addr(0x2222),
     name: "Vault Cat",
     symbol: "VCAT",
@@ -85,13 +117,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.000082,
     change24h: 12.1,
     description: "Cold storage memes.",
-    ...(() => {
-      const f = feesFromVol(33400);
-      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
-    })(),
     imageHue: 280,
-  },
-  {
+    twitter: "https://x.com/vaultcat",
+    volForFees: 33400,
+  }),
+  tok({
     address: addr(0x3333),
     name: "Gridlock",
     symbol: "GRID",
@@ -106,13 +136,10 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.0000042,
     change24h: -8.4,
     description: "Micro-cap grid cult.",
-    ...(() => {
-      const f = feesFromVol(1800);
-      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
-    })(),
     imageHue: 210,
-  },
-  {
+    volForFees: 1800,
+  }),
+  tok({
     address: addr(0x4444),
     name: "Northstar",
     symbol: "NSTR",
@@ -127,13 +154,13 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.00021,
     change24h: 6.2,
     description: "Cleared graduation. Same pool.",
-    ...(() => {
-      const f = feesFromVol(89000);
-      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
-    })(),
     imageHue: 40,
-  },
-  {
+    website: "https://northstar.example",
+    twitter: "https://x.com/northstar",
+    telegram: "https://t.me/northstar",
+    volForFees: 89000,
+  }),
+  tok({
     address: addr(0x5555),
     name: "Quiet Protocol",
     symbol: "QUIET",
@@ -148,13 +175,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.000031,
     change24h: 19.8,
     description: "No CT spam. Just chart.",
-    ...(() => {
-      const f = feesFromVol(9800);
-      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
-    })(),
     imageHue: 200,
-  },
-  {
+    telegram: "https://t.me/quiet",
+    volForFees: 9800,
+  }),
+  tok({
     address: addr(0x6666),
     name: "Ironleaf",
     symbol: "LEAF",
@@ -169,13 +194,10 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.00011,
     change24h: -3.2,
     description: "Slow grind curve.",
-    ...(() => {
-      const f = feesFromVol(22100);
-      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
-    })(),
     imageHue: 130,
-  },
-  {
+    volForFees: 22100,
+  }),
+  tok({
     address: addr(0x7777),
     name: "Apex Unit",
     symbol: "APEX",
@@ -190,13 +212,12 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.00048,
     change24h: 28.4,
     description: "High-conviction clear.",
-    ...(() => {
-      const f = feesFromVol(150000);
-      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
-    })(),
     imageHue: 350,
-  },
-  {
+    website: "https://apex.example",
+    twitter: "https://x.com/apexunit",
+    volForFees: 150000,
+  }),
+  tok({
     address: addr(0x8888),
     name: "Dust Route",
     symbol: "DUST",
@@ -211,12 +232,9 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.0000018,
     change24h: 4.0,
     description: "Fresh. Thin book.",
-    ...(() => {
-      const f = feesFromVol(620);
-      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
-    })(),
     imageHue: 20,
-  },
+    volForFees: 620,
+  }),
 ];
 
 export const DEMO_ACTIVITY: Activity[] = [
@@ -236,13 +254,20 @@ export function createDemoToken(input: {
   description?: string;
   creator?: string;
   firstBuy?: number;
+  imageUrl?: string;
+  website?: string;
+  twitter?: string;
+  telegram?: string;
 }): LaunchToken {
   const raised = Math.max(0, Number(input.firstBuy) || 0);
   const f = feeSplit(raised);
+  const hue = Math.floor(Math.random() * 360);
+  const symbol = input.symbol.toUpperCase().slice(0, 10);
+  const address = addr(0x9000 + Math.floor(Math.random() * 0xffff));
   return {
-    address: addr(0x9000 + Math.floor(Math.random() * 0xffff)),
+    address,
     name: input.name,
-    symbol: input.symbol.toUpperCase().slice(0, 10),
+    symbol,
     creator: input.creator || addr(0xcafe),
     createdAt: now(),
     raised,
@@ -256,10 +281,13 @@ export function createDemoToken(input: {
     description: input.description || "",
     creatorFeesEarned: f.creator,
     platformFeesEarned: f.platform,
-    imageHue: Math.floor(Math.random() * 360),
+    imageHue: hue,
+    imageUrl: input.imageUrl || placeholderImage(symbol + address, hue),
+    website: input.website || "",
+    twitter: input.twitter || "",
+    telegram: input.telegram || "",
   };
 }
 
-// keep unused import noise down for older references
 void CREATOR_FEE_BPS;
 void PLATFORM_FEE_BPS;

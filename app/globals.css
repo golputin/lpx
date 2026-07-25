@@ -234,11 +234,97 @@ table.tokens tr:last-child td { border-bottom: 0; }
   place-items: center;
   font-size: 11px;
   font-weight: 800;
-  color: #0a0a0a;
+  color: #cfcfcf;
   flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+  background: #1a1a1a;
 }
+.av img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: 1;
+}
+.av span {
+  position: relative;
+  z-index: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.av.sm { width: 22px; height: 22px; border-radius: 6px; }
+.av.lg { width: 48px; height: 48px; border-radius: 10px; font-size: 13px; }
 .tok .n { font-weight: 700; }
 .tok .m { color: var(--muted); font-size: 12px; font-family: var(--mono); }
+.socials {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+.socials a {
+  border: 1px solid var(--line2);
+  background: #101010;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.socials a:hover { color: var(--text); border-color: #444; }
+.act-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.logo-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0e0e0e;
+}
+.logo-pick {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  border: 1px dashed #3a3a3a;
+  background-size: cover;
+  background-position: center;
+  background-color: #151515;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.logo-pick:hover { border-color: #555; color: var(--text); }
+.logo-meta { flex: 1; min-width: 0; }
+.logo-actions { display: flex; gap: 6px; margin-bottom: 6px; }
+.hint { color: var(--dim); font-size: 11px; line-height: 1.35; }
+.preview-box {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0e0e0e;
+  margin-bottom: 12px;
+}
+.preview-box .n { font-weight: 700; font-size: 15px; }
+.preview-box .m { color: var(--muted); font-size: 12px; }
 
 .tag {
   display: inline-block;
