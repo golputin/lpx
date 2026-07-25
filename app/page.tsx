@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   APP_NAME,
-  APP_TAGLINE,
   CHAIN_ID,
   CHAIN_NAME,
-  CREATOR_FEE_BPS,
+  CREATOR_SHARE_BPS,
   DEMO_MODE,
   GRAD_TARGET,
-  PLATFORM_FEE_BPS,
+  PLATFORM_SHARE_BPS,
   QUOTE_SYMBOL,
+  TRADE_FEE_BPS,
   bpsToPct,
+  feeSplit,
   fmt,
   fmtUsd,
+  shareToPct,
   shortAddr,
   timeAgo,
 } from "@/lib/config";
@@ -29,8 +31,8 @@ type Tab = "explore" | "create" | "token";
 type Filter = "all" | "live" | "graduated" | "newest" | "mcap" | "volume";
 type Side = "buy" | "sell";
 
-const STORE_KEY = "lpx_pad_tokens_v1";
-const ACT_KEY = "lpx_pad_activity_v1";
+const STORE_KEY = "lpx_pad_tokens_v2";
+const ACT_KEY = "lpx_pad_activity_v2";
 
 function loadTokens(): LaunchToken[] {
   if (typeof window === "undefined") return DEMO_TOKENS;
@@ -55,9 +57,9 @@ function loadActivity(): Activity[] {
   }
 }
 
-function avatarStyle(hue: number) {
+function avStyle(hue: number) {
   return {
-    background: `linear-gradient(135deg, hsl(${hue} 42% 58%), hsl(${(hue + 40) % 360} 35% 42%))`,
+    background: `hsl(${hue} 55% 52%)`,
   } as const;
 }
 
@@ -73,7 +75,6 @@ export default function HomePage() {
   const [tradeAmt, setTradeAmt] = useState("100");
   const [msg, setMsg] = useState<string | null>(null);
 
-  // create form
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [desc, setDesc] = useState("");
@@ -129,10 +130,8 @@ export default function HomePage() {
   );
 
   function connect() {
-    // demo wallet — UI only until factory is wired
-    const w = "0x1b04beb50c40df7e5efdbf91c5d876e94666603d";
-    setWallet(w);
-    setMsg("Wallet connected (demo). Factory not required for UI preview.");
+    setWallet("0x1b04beb50c40df7e5efdbf91c5d876e94666603d");
+    setMsg("connected (demo)");
   }
 
   function openToken(addr: string) {
@@ -143,7 +142,7 @@ export default function HomePage() {
 
   function launchToken() {
     if (!name.trim() || !symbol.trim()) {
-      setMsg("Name and symbol are required.");
+      setMsg("name + symbol required");
       return;
     }
     setBusy(true);
@@ -156,7 +155,8 @@ export default function HomePage() {
         firstBuy: Number(firstBuy) || 0,
       });
       setTokens((prev) => [t, ...prev]);
-      setActivity((prev) => [
+      const ts = Math.floor(Date.now() / 1000);
+      const rows: Activity[] = [
         {
           id: `${Date.now()}`,
           kind: "launch",
@@ -164,51 +164,45 @@ export default function HomePage() {
           symbol: t.symbol,
           trader: t.creator,
           amountUsd: Number(firstBuy) || 0,
-          ts: Math.floor(Date.now() / 1000),
+          ts,
         },
-        ...prev,
-      ]);
+      ];
       if ((Number(firstBuy) || 0) > 0) {
-        setActivity((prev) => [
-          {
-            id: `${Date.now()}-buy`,
-            kind: "buy",
-            token: t.address,
-            symbol: t.symbol,
-            trader: t.creator,
-            amountUsd: Number(firstBuy) || 0,
-            ts: Math.floor(Date.now() / 1000),
-          },
-          ...prev,
-        ]);
+        rows.unshift({
+          id: `${Date.now()}-b`,
+          kind: "buy",
+          token: t.address,
+          symbol: t.symbol,
+          trader: t.creator,
+          amountUsd: Number(firstBuy) || 0,
+          ts,
+        });
       }
+      setActivity((prev) => [...rows, ...prev]);
       setBusy(false);
       setName("");
       setSymbol("");
       setDesc("");
-      setFirstBuy("50");
-      setMsg(`Deployed ${t.symbol} on bonding curve (demo). Creator fee ${bpsToPct(CREATOR_FEE_BPS)} active.`);
+      setMsg(`${t.symbol} live · creator share ${shareToPct(CREATOR_SHARE_BPS)} of ${bpsToPct(TRADE_FEE_BPS)} fee`);
       openToken(t.address);
-    }, 450);
+    }, 350);
   }
 
   function simulateTrade() {
     if (!active) return;
     const amt = Math.max(0, Number(tradeAmt) || 0);
     if (amt <= 0) {
-      setMsg("Enter a valid amount.");
+      setMsg("bad amount");
       return;
     }
-    const creatorCut = (amt * CREATOR_FEE_BPS) / 10_000;
-    const platformCut = (amt * PLATFORM_FEE_BPS) / 10_000;
-    const net = amt - creatorCut - platformCut;
+    const split = feeSplit(amt);
+    const net = amt - split.total;
     setTokens((prev) =>
       prev.map((t) => {
         if (t.address !== active.address) return t;
         const raisedDelta = side === "buy" ? net : -net * 0.9;
         const raised = Math.max(0, t.raised + raisedDelta);
         const progress = Math.min(100, (raised / GRAD_TARGET) * 100);
-        const graduated = raised >= GRAD_TARGET;
         return {
           ...t,
           raised,
@@ -218,9 +212,9 @@ export default function HomePage() {
           holders: side === "buy" ? t.holders + (Math.random() > 0.6 ? 1 : 0) : t.holders,
           price: Math.max(0.0000001, t.price * (side === "buy" ? 1.02 : 0.985)),
           change24h: t.change24h + (side === "buy" ? 1.2 : -0.9),
-          creatorFeesEarned: t.creatorFeesEarned + creatorCut,
-          platformFeesEarned: t.platformFeesEarned + platformCut,
-          status: graduated ? "graduated" : t.status,
+          creatorFeesEarned: t.creatorFeesEarned + split.creator,
+          platformFeesEarned: t.platformFeesEarned + split.platform,
+          status: raised >= GRAD_TARGET ? "graduated" : t.status,
         };
       })
     );
@@ -237,212 +231,180 @@ export default function HomePage() {
       ...prev,
     ]);
     setMsg(
-      `${side === "buy" ? "Bought" : "Sold"} ~${fmtUsd(amt)} · creator fee ${fmtUsd(creatorCut)} · platform ${fmtUsd(platformCut)}`
+      `${side} ${fmtUsd(amt)} · fee ${fmtUsd(split.total)} → creator ${fmtUsd(split.creator)} (${shareToPct(CREATOR_SHARE_BPS)})`
     );
   }
 
+  const tradePreview = feeSplit(Number(tradeAmt) || 0);
+
   return (
-    <div className="shell">
-      <nav className="nav">
-        <div className="brand">
-          <img src="/logo.svg" alt="LPX" />
-          <div className="t">
-            <strong>{APP_NAME}</strong>
-            <span>{APP_TAGLINE}</span>
-          </div>
+    <div className="app">
+      <header className="top">
+        <div className="logo">
+          <img src="/logo.svg" alt="" />
+          {APP_NAME}
+          <span>/{CHAIN_ID}</span>
         </div>
-        <div className="nav-mid">
-          <button className={tab === "explore" ? "active" : ""} onClick={() => setTab("explore")}>
-            Explore
+        <nav className="menu">
+          <button className={tab === "explore" ? "on" : ""} onClick={() => setTab("explore")}>
+            explore
           </button>
-          <button className={tab === "create" ? "active" : ""} onClick={() => setTab("create")}>
-            Create
+          <button className={tab === "create" ? "on" : ""} onClick={() => setTab("create")}>
+            create
           </button>
           <button
-            className={tab === "token" ? "active" : ""}
+            className={tab === "token" ? "on" : ""}
             onClick={() => (active ? setTab("token") : setTab("explore"))}
           >
-            Token
+            token
           </button>
-        </div>
-        <div className="nav-right">
-          <span className="badge">
-            <span className="dot" /> {CHAIN_NAME} · {CHAIN_ID}
+        </nav>
+        <div className="right">
+          <span className="pill">
+            <b>●</b> {CHAIN_NAME}
           </span>
-          {DEMO_MODE && <span className="badge">DEMO</span>}
-          <button className="btn primary" onClick={connect}>
-            {wallet ? shortAddr(wallet, 4) : "Connect"}
+          {DEMO_MODE && <span className="pill">demo</span>}
+          <button className="btn green" onClick={connect}>
+            {wallet ? shortAddr(wallet, 3) : "connect"}
           </button>
         </div>
-      </nav>
+      </header>
 
       {tab === "explore" && (
         <>
-          <section className="hero">
-            <div className="panel">
-              <div className="kicker">Bonding curve launchpad</div>
-              <h1>
-                Launch tokens.
-                <br />
-                Earn on every trade.
-              </h1>
-              <p className="lead">
-                Deploy a coin on Stable with locked curve liquidity. Creators earn a permanent fee
-                share. Platform takes a thin cut. Graduate to DEX when the raise clears{" "}
-                {fmtUsd(GRAD_TARGET)}.
-              </p>
-              <div className="stat-row">
-                <div className="stat">
-                  <div className="l">Launched</div>
-                  <div className="v">{stats.launched}</div>
-                </div>
-                <div className="stat">
-                  <div className="l">On curve</div>
-                  <div className="v">{stats.live}</div>
-                </div>
-                <div className="stat">
-                  <div className="l">Graduated</div>
-                  <div className="v">{stats.graduated}</div>
-                </div>
-                <div className="stat">
-                  <div className="l">24h volume</div>
-                  <div className="v">{fmtUsd(stats.vol)}</div>
-                </div>
-              </div>
+          <div className="strip">
+            <div className="s">
+              <div className="l">launched</div>
+              <div className="v">{stats.launched}</div>
             </div>
-            <div className="panel fee-card">
-              <div className="kicker">Fee model</div>
-              <h3>Creator fee built in</h3>
-              <p>
-                Every buy and sell on the curve routes fees automatically — no harvest bot theater.
-                Transparent split, shown on every token page.
-              </p>
-              <div className="fee-grid">
-                <div className="row">
-                  <span>Creator fee</span>
-                  <strong className="gold">{bpsToPct(CREATOR_FEE_BPS)}</strong>
-                </div>
-                <div className="row">
-                  <span>Platform fee</span>
-                  <strong>{bpsToPct(PLATFORM_FEE_BPS)}</strong>
-                </div>
-                <div className="row">
-                  <span>Total trade fee</span>
-                  <strong>{bpsToPct(CREATOR_FEE_BPS + PLATFORM_FEE_BPS)}</strong>
-                </div>
-                <div className="row">
-                  <span>Quote asset</span>
-                  <strong className="mono">{QUOTE_SYMBOL}</strong>
-                </div>
-                <div className="row">
-                  <span>Creator fees (demo set)</span>
-                  <strong className="good">{fmtUsd(stats.creatorFees)}</strong>
-                </div>
-              </div>
-              <button className="btn primary block lg" style={{ marginTop: 14 }} onClick={() => setTab("create")}>
-                Create token
-              </button>
+            <div className="s">
+              <div className="l">on curve</div>
+              <div className="v">{stats.live}</div>
             </div>
-          </section>
+            <div className="s">
+              <div className="l">graduated</div>
+              <div className="v">{stats.graduated}</div>
+            </div>
+            <div className="s">
+              <div className="l">vol 24h</div>
+              <div className="v">{fmtUsd(stats.vol)}</div>
+            </div>
+            <div className="s">
+              <div className="l">creator fees</div>
+              <div className="v up">{fmtUsd(stats.creatorFees)}</div>
+            </div>
+          </div>
 
-          <div className="toolbar">
-            <div className="tabs">
+          <div className="bar">
+            <div className="filters">
               {(
                 [
-                  ["all", "All"],
-                  ["live", "On curve"],
-                  ["graduated", "Graduated"],
-                  ["newest", "Newest"],
-                  ["mcap", "Market cap"],
-                  ["volume", "Volume"],
+                  ["all", "all"],
+                  ["live", "live"],
+                  ["graduated", "grad"],
+                  ["newest", "new"],
+                  ["mcap", "mcap"],
+                  ["volume", "vol"],
                 ] as const
               ).map(([id, label]) => (
-                <button
-                  key={id}
-                  className={`tab ${filter === id ? "active" : ""}`}
-                  onClick={() => setFilter(id)}
-                >
+                <button key={id} className={filter === id ? "on" : ""} onClick={() => setFilter(id)}>
                   {label}
                 </button>
               ))}
             </div>
             <div className="search">
               <input
-                placeholder="Search name, symbol, address"
+                placeholder="search token / ca"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
             </div>
+            <button className="btn green" onClick={() => setTab("create")}>
+              + create
+            </button>
           </div>
 
-          <div className="layout">
-            <div>
-              {filtered.length === 0 ? (
-                <div className="empty">No tokens match this filter.</div>
-              ) : (
-                <div className="token-grid">
+          <div className="main">
+            <div className="table-wrap scrollx">
+              <table className="tokens">
+                <thead>
+                  <tr>
+                    <th>token</th>
+                    <th>status</th>
+                    <th>mcap</th>
+                    <th>vol</th>
+                    <th>24h</th>
+                    <th>curve</th>
+                    <th>creator fee</th>
+                    <th>age</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {filtered.map((t) => (
-                    <button key={t.address} className="token-card" onClick={() => openToken(t.address)}>
-                      <div className="top">
-                        <div className="avatar" style={avatarStyle(t.imageHue)}>
-                          {t.symbol.slice(0, 2)}
-                        </div>
-                        <div style={{ minWidth: 0 }}>
-                          <h3>{t.name}</h3>
-                          <div className="sym">
-                            ${t.symbol} · {shortAddr(t.address, 4)}
+                    <tr key={t.address} onClick={() => openToken(t.address)}>
+                      <td>
+                        <div className="tok">
+                          <div className="av" style={avStyle(t.imageHue)}>
+                            {t.symbol.slice(0, 2)}
+                          </div>
+                          <div>
+                            <div className="n">{t.name}</div>
+                            <div className="m">
+                              ${t.symbol} · {shortAddr(t.address, 3)}
+                            </div>
                           </div>
                         </div>
-                        <span className={`pill ${t.status === "graduated" ? "grad" : "live"}`}>
-                          {t.status === "graduated" ? "Graduated" : "Live"}
+                      </td>
+                      <td>
+                        <span className={`tag ${t.status === "graduated" ? "grad" : "live"}`}>
+                          {t.status === "graduated" ? "grad" : "live"}
                         </span>
-                      </div>
-                      <div className="meta">
-                        <div>
-                          <div className="l">Mcap</div>
-                          <div className="v">{fmtUsd(t.mcap)}</div>
-                        </div>
-                        <div>
-                          <div className="l">Vol 24h</div>
-                          <div className="v">{fmtUsd(t.vol24h)}</div>
-                        </div>
-                        <div>
-                          <div className="l">24h</div>
-                          <div className={`v ${t.change24h >= 0 ? "good" : "bad"}`}>
-                            {t.change24h >= 0 ? "+" : ""}
-                            {t.change24h.toFixed(1)}%
+                      </td>
+                      <td>{fmtUsd(t.mcap)}</td>
+                      <td>{fmtUsd(t.vol24h)}</td>
+                      <td className={t.change24h >= 0 ? "up" : "dn"}>
+                        {t.change24h >= 0 ? "+" : ""}
+                        {t.change24h.toFixed(1)}%
+                      </td>
+                      <td>
+                        <div className="prog">
+                          <div className="track">
+                            <i style={{ width: `${Math.min(100, t.progress)}%` }} />
+                          </div>
+                          <div className="cap">
+                            {fmtUsd(t.raised)}/{fmtUsd(GRAD_TARGET)}
                           </div>
                         </div>
-                      </div>
-                      <div className="bar">
-                        <i style={{ width: `${Math.min(100, t.progress)}%` }} />
-                      </div>
-                      <div className="bar-label">
-                        <span>
-                          {fmtUsd(t.raised)} / {fmtUsd(GRAD_TARGET)}
-                        </span>
-                        <span>{timeAgo(t.createdAt)} ago</span>
-                      </div>
-                    </button>
+                      </td>
+                      <td className="up">{fmtUsd(t.creatorFeesEarned)}</td>
+                      <td className="dim">{timeAgo(t.createdAt)}</td>
+                    </tr>
                   ))}
-                </div>
-              )}
+                  {filtered.length === 0 && (
+                    <tr>
+                      <td colSpan={8}>
+                        <div className="empty">no tokens</div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
 
-            <aside className="panel flat">
-              <div className="kicker">Live activity</div>
-              <div className="activity">
-                {activity.slice(0, 18).map((a) => (
-                  <div className="act" key={a.id}>
+            <aside className="side">
+              <h3>activity</h3>
+              <div className="feed">
+                {activity.slice(0, 24).map((a) => (
+                  <div className="row" key={a.id}>
                     <div className={`k ${a.kind}`}>{a.kind}</div>
                     <div>
                       <div>
-                        <strong>${a.symbol}</strong>{" "}
-                        <span className="faint mono">{shortAddr(a.trader, 3)}</span>
+                        <b>${a.symbol}</b>{" "}
+                        <span className="dim mono">{shortAddr(a.trader, 2)}</span>
                       </div>
-                      <div className="faint">{timeAgo(a.ts)} ago</div>
+                      <div className="dim">{timeAgo(a.ts)}</div>
                     </div>
-                    <div className={a.kind === "sell" ? "bad" : "good"}>
+                    <div className={a.kind === "sell" ? "dn" : "up"}>
                       {a.amountUsd > 0 ? fmtUsd(a.amountUsd) : "—"}
                     </div>
                   </div>
@@ -454,195 +416,173 @@ export default function HomePage() {
       )}
 
       {tab === "create" && (
-        <section className="create-grid">
-          <div className="panel">
-            <div className="kicker">Create</div>
-            <h2 style={{ margin: "0 0 6px", fontSize: "1.35rem", letterSpacing: "-0.02em" }}>
-              Deploy a bonding-curve token
-            </h2>
-            <p className="muted" style={{ marginTop: 0, lineHeight: 1.55 }}>
-              One flow: metadata → curve → optional first buy. Creator fee is fixed at{" "}
-              {bpsToPct(CREATOR_FEE_BPS)} of every trade for the life of the curve.
+        <div className="grid2">
+          <div className="card">
+            <h2>create token</h2>
+            <p className="sub">
+              1% trade fee · creator gets <b>{shareToPct(CREATOR_SHARE_BPS)}</b> · platform{" "}
+              {shareToPct(PLATFORM_SHARE_BPS)}
             </p>
-            <div className="form" style={{ marginTop: 16 }}>
+            <div className="form">
               <div className="two">
                 <div className="field">
-                  <label>Token name</label>
-                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Northstar" />
+                  <label>name</label>
+                  <input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" />
                 </div>
                 <div className="field">
-                  <label>Symbol</label>
+                  <label>symbol</label>
                   <input
                     value={symbol}
-                    onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                    placeholder="NSTR"
                     maxLength={10}
+                    onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                    placeholder="TICKER"
                   />
                 </div>
               </div>
               <div className="field">
-                <label>Description</label>
-                <textarea
-                  value={desc}
-                  onChange={(e) => setDesc(e.target.value)}
-                  placeholder="Short thesis. No emoji spam."
-                />
+                <label>description</label>
+                <textarea value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="optional" />
               </div>
               <div className="two">
                 <div className="field">
-                  <label>First buy ({QUOTE_SYMBOL})</label>
+                  <label>first buy ({QUOTE_SYMBOL})</label>
                   <input
                     type="number"
                     min={0}
                     value={firstBuy}
                     onChange={(e) => setFirstBuy(e.target.value)}
                   />
-                  <div className="hint">Optional sniper buy in the same launch flow.</div>
                 </div>
                 <div className="field">
-                  <label>Graduation target</label>
+                  <label>grad target</label>
                   <input value={`${GRAD_TARGET} ${QUOTE_SYMBOL}`} disabled />
-                  <div className="hint">Auto-migrate liquidity when filled.</div>
                 </div>
               </div>
-              <button className="btn primary lg" disabled={busy} onClick={launchToken}>
-                {busy ? "Deploying…" : "Create token"}
+              <button className="btn green lg" disabled={busy} onClick={launchToken}>
+                {busy ? "deploying…" : "deploy"}
               </button>
               {msg && <div className="note">{msg}</div>}
             </div>
           </div>
 
-          <div className="panel summary">
-            <div className="kicker">Live summary</div>
-            <div className="row">
-              <span>Name</span>
-              <strong>{name || "—"}</strong>
-            </div>
-            <div className="row">
-              <span>Symbol</span>
-              <strong>${(symbol || "———").toUpperCase()}</strong>
-            </div>
-            <div className="row">
-              <span>Creator fee</span>
-              <strong className="gold">{bpsToPct(CREATOR_FEE_BPS)}</strong>
-            </div>
-            <div className="row">
-              <span>Platform fee</span>
-              <strong>{bpsToPct(PLATFORM_FEE_BPS)}</strong>
-            </div>
-            <div className="row">
-              <span>First buy</span>
-              <strong>
-                {fmt(Number(firstBuy) || 0)} {QUOTE_SYMBOL}
-              </strong>
-            </div>
-            <div className="row">
-              <span>Network</span>
-              <strong>
-                {CHAIN_NAME} ({CHAIN_ID})
-              </strong>
+          <div className="card">
+            <h2>fee split</h2>
+            <p className="sub">same model as Pons-style creator rewards</p>
+            <div className="lines">
+              <div className="ln">
+                <span>trade fee</span>
+                <b>{bpsToPct(TRADE_FEE_BPS)}</b>
+              </div>
+              <div className="ln">
+                <span>creator share</span>
+                <b className="up">{shareToPct(CREATOR_SHARE_BPS)}</b>
+              </div>
+              <div className="ln">
+                <span>platform share</span>
+                <b>{shareToPct(PLATFORM_SHARE_BPS)}</b>
+              </div>
+              <div className="ln">
+                <span>creator effective</span>
+                <b className="up">~{bpsToPct(Math.round((TRADE_FEE_BPS * CREATOR_SHARE_BPS) / 10_000))}</b>
+              </div>
+              <div className="ln">
+                <span>platform effective</span>
+                <b>~{bpsToPct(Math.round((TRADE_FEE_BPS * PLATFORM_SHARE_BPS) / 10_000))}</b>
+              </div>
+              <div className="ln">
+                <span>preview</span>
+                <b>
+                  {(symbol || "—").toUpperCase()} / {name || "—"}
+                </b>
+              </div>
+              <div className="ln">
+                <span>first buy</span>
+                <b>
+                  {fmt(Number(firstBuy) || 0)} {QUOTE_SYMBOL}
+                </b>
+              </div>
             </div>
             <div className="note">
-              Demo mode stores launches in your browser. Wire <code>NEXT_PUBLIC_FACTORY</code> later
-              for real deploys — UI is production-shaped already.
+              example: <b>$10,000</b> volume → fee <b>$100</b> → creator <b>$80</b> · platform <b>$20</b>
             </div>
           </div>
-        </section>
+        </div>
       )}
 
       {tab === "token" && (
         <section>
           <button className="back" onClick={() => setTab("explore")}>
-            ← Back to explore
+            ← explore
           </button>
           {!active ? (
-            <div className="empty">Select a token from Explore.</div>
+            <div className="empty">pick a token</div>
           ) : (
-            <div className="detail">
-              <div className="panel">
-                <div className="top" style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                  <div className="avatar" style={avatarStyle(active.imageHue)}>
+            <div className="grid2">
+              <div className="card">
+                <div className="head">
+                  <div className="av" style={avStyle(active.imageHue)}>
                     {active.symbol.slice(0, 2)}
                   </div>
-                  <div>
-                    <h2 style={{ margin: 0, fontSize: "1.35rem" }}>{active.name}</h2>
-                    <div className="muted">
-                      ${active.symbol} · <span className="mono">{shortAddr(active.address, 6)}</span>
+                  <div style={{ flex: 1 }}>
+                    <h2>{active.name}</h2>
+                    <div className="meta mono">
+                      ${active.symbol} · {shortAddr(active.address, 5)}
                     </div>
                   </div>
-                  <span
-                    className={`pill ${active.status === "graduated" ? "grad" : "live"}`}
-                    style={{ marginLeft: "auto" }}
-                  >
-                    {active.status === "graduated" ? "Graduated" : "On curve"}
+                  <span className={`tag ${active.status === "graduated" ? "grad" : "live"}`}>
+                    {active.status === "graduated" ? "grad" : "live"}
                   </span>
                 </div>
 
-                <p className="muted" style={{ lineHeight: 1.55, margin: "14px 0" }}>
-                  {active.description}
-                </p>
+                {active.description && <p className="sub">{active.description}</p>}
 
-                <div className="stat-row" style={{ marginBottom: 14 }}>
-                  <div className="stat">
-                    <div className="l">Price</div>
+                <div className="stats4">
+                  <div className="s">
+                    <div className="l">price</div>
                     <div className="v">${active.price.toPrecision(4)}</div>
                   </div>
-                  <div className="stat">
-                    <div className="l">Market cap</div>
+                  <div className="s">
+                    <div className="l">mcap</div>
                     <div className="v">{fmtUsd(active.mcap)}</div>
                   </div>
-                  <div className="stat">
-                    <div className="l">Volume 24h</div>
+                  <div className="s">
+                    <div className="l">vol</div>
                     <div className="v">{fmtUsd(active.vol24h)}</div>
                   </div>
-                  <div className="stat">
-                    <div className="l">Holders</div>
+                  <div className="s">
+                    <div className="l">holders</div>
                     <div className="v">{active.holders}</div>
                   </div>
                 </div>
 
                 <div className="chart" aria-hidden>
-                  <svg viewBox="0 0 640 280" preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="rgba(212,160,23,0.35)" />
-                        <stop offset="100%" stopColor="rgba(212,160,23,0)" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d={chartPath(active)}
-                      fill="url(#fill)"
-                      stroke="#d4a017"
-                      strokeWidth="2.5"
-                    />
+                  <svg viewBox="0 0 640 240" preserveAspectRatio="none">
+                    <path d={chartPath(active)} fill="rgba(0,200,83,0.12)" stroke="#00c853" strokeWidth="2" />
                   </svg>
                 </div>
 
-                <div className="bar" style={{ marginTop: 14 }}>
-                  <i style={{ width: `${Math.min(100, active.progress)}%` }} />
-                </div>
-                <div className="bar-label">
-                  <span>
-                    Curve progress · {fmtUsd(active.raised)} / {fmtUsd(GRAD_TARGET)}
-                  </span>
-                  <span>{Math.min(100, active.progress).toFixed(1)}%</span>
+                <div className="prog" style={{ marginTop: 12 }}>
+                  <div className="track">
+                    <i style={{ width: `${Math.min(100, active.progress)}%` }} />
+                  </div>
+                  <div className="cap">
+                    curve {fmtUsd(active.raised)} / {fmtUsd(GRAD_TARGET)} ·{" "}
+                    {Math.min(100, active.progress).toFixed(1)}%
+                  </div>
                 </div>
               </div>
 
-              <div className="panel trade-box">
-                <div className="tabs-mini">
-                  <button className={side === "buy" ? "active buy" : ""} onClick={() => setSide("buy")}>
-                    Buy
+              <div className="card">
+                <div className="tabs2">
+                  <button className={side === "buy" ? "on buy" : ""} onClick={() => setSide("buy")}>
+                    buy
                   </button>
-                  <button
-                    className={side === "sell" ? "active sell" : ""}
-                    onClick={() => setSide("sell")}
-                  >
-                    Sell
+                  <button className={side === "sell" ? "on sell" : ""} onClick={() => setSide("sell")}>
+                    sell
                   </button>
                 </div>
                 <div className="field">
-                  <label>Amount ({QUOTE_SYMBOL})</label>
+                  <label>amount ({QUOTE_SYMBOL})</label>
                   <input
                     type="number"
                     min={0}
@@ -650,55 +590,49 @@ export default function HomePage() {
                     onChange={(e) => setTradeAmt(e.target.value)}
                   />
                 </div>
-                <div className="kv">
-                  <div>
-                    <span>Creator fee</span>
-                    <span className="gold">
-                      {fmtUsd(((Number(tradeAmt) || 0) * CREATOR_FEE_BPS) / 10_000)} (
-                      {bpsToPct(CREATOR_FEE_BPS)})
-                    </span>
+                <div className="lines" style={{ marginTop: 8 }}>
+                  <div className="ln">
+                    <span>trade fee ({bpsToPct(TRADE_FEE_BPS)})</span>
+                    <b>{fmtUsd(tradePreview.total)}</b>
                   </div>
-                  <div>
-                    <span>Platform fee</span>
-                    <span>
-                      {fmtUsd(((Number(tradeAmt) || 0) * PLATFORM_FEE_BPS) / 10_000)} (
-                      {bpsToPct(PLATFORM_FEE_BPS)})
-                    </span>
+                  <div className="ln">
+                    <span>creator ({shareToPct(CREATOR_SHARE_BPS)})</span>
+                    <b className="up">{fmtUsd(tradePreview.creator)}</b>
                   </div>
-                  <div>
-                    <span>Creator earned (total)</span>
-                    <span className="good">{fmtUsd(active.creatorFeesEarned)}</span>
+                  <div className="ln">
+                    <span>platform ({shareToPct(PLATFORM_SHARE_BPS)})</span>
+                    <b>{fmtUsd(tradePreview.platform)}</b>
                   </div>
-                  <div>
-                    <span>Creator</span>
-                    <span className="mono">{shortAddr(active.creator, 4)}</span>
+                  <div className="ln">
+                    <span>creator earned</span>
+                    <b className="up">{fmtUsd(active.creatorFeesEarned)}</b>
+                  </div>
+                  <div className="ln">
+                    <span>creator wallet</span>
+                    <b className="mono">{shortAddr(active.creator, 4)}</b>
                   </div>
                 </div>
                 <button
-                  className="btn primary block lg"
-                  style={{ marginTop: 14 }}
+                  className={`btn lg block ${side === "buy" ? "green" : "red"}`}
+                  style={{ marginTop: 12 }}
                   onClick={simulateTrade}
                 >
-                  {side === "buy" ? "Buy on curve" : "Sell on curve"}
+                  {side === "buy" ? "buy" : "sell"}
                 </button>
                 {msg && <div className="note">{msg}</div>}
-                <p className="faint" style={{ marginTop: 12, fontSize: "0.78rem", lineHeight: 1.45 }}>
-                  Demo trades update local state only. Same fee math as production target: creator{" "}
-                  {bpsToPct(CREATOR_FEE_BPS)} + platform {bpsToPct(PLATFORM_FEE_BPS)}.
-                </p>
               </div>
             </div>
           )}
         </section>
       )}
 
-      <footer className="footer">
+      <footer className="foot">
         <span>
-          {APP_NAME} · Stable {CHAIN_ID} · not financial advice
+          {APP_NAME} · {CHAIN_NAME} {CHAIN_ID}
         </span>
         <span>
-          Creator {bpsToPct(CREATOR_FEE_BPS)} · Platform {bpsToPct(PLATFORM_FEE_BPS)} · Grad{" "}
-          {fmtUsd(GRAD_TARGET)}
+          fee {bpsToPct(TRADE_FEE_BPS)} · creator {shareToPct(CREATOR_SHARE_BPS)} · platform{" "}
+          {shareToPct(PLATFORM_SHARE_BPS)} · grad {fmtUsd(GRAD_TARGET)}
         </span>
       </footer>
     </div>
@@ -706,19 +640,16 @@ export default function HomePage() {
 }
 
 function chartPath(t: LaunchToken) {
-  // Deterministic fake curve from token fields
   const pts: string[] = [];
-  const n = 28;
-  let y = 210;
+  const n = 32;
   for (let i = 0; i < n; i++) {
     const x = (i / (n - 1)) * 640;
     const wave =
-      Math.sin(i * 0.55 + t.imageHue) * 18 +
-      Math.cos(i * 0.2) * 10 +
-      (t.change24h >= 0 ? -i * 2.1 : i * 1.2);
-    y = Math.min(250, Math.max(40, 200 + wave - t.progress * 0.7));
+      Math.sin(i * 0.45 + t.imageHue * 0.01) * 16 +
+      Math.cos(i * 0.18) * 8 +
+      (t.change24h >= 0 ? -i * 1.8 : i * 1.1);
+    const y = Math.min(220, Math.max(30, 170 + wave - t.progress * 0.55));
     pts.push(`${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`);
   }
-  const lastX = 640;
-  return `${pts.join(" ")} L ${lastX} 280 L 0 280 Z`;
+  return `${pts.join(" ")} L 640 240 L 0 240 Z`;
 }

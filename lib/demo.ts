@@ -1,4 +1,9 @@
-import { CREATOR_FEE_BPS, GRAD_TARGET, PLATFORM_FEE_BPS } from "./config";
+import {
+  CREATOR_FEE_BPS,
+  GRAD_TARGET,
+  PLATFORM_FEE_BPS,
+  feeSplit,
+} from "./config";
 
 export type TokenStatus = "live" | "graduated";
 
@@ -12,7 +17,7 @@ export type LaunchToken = {
   mcap: number;
   vol24h: number;
   holders: number;
-  progress: number; // 0-100
+  progress: number;
   status: TokenStatus;
   price: number;
   change24h: number;
@@ -38,6 +43,11 @@ function addr(n: number) {
   return (`0x${n.toString(16).padStart(40, "0")}`).toLowerCase();
 }
 
+function feesFromVol(vol: number) {
+  const s = feeSplit(vol);
+  return { creator: s.creator, platform: s.platform };
+}
+
 export const DEMO_TOKENS: LaunchToken[] = [
   {
     address: addr(0x1111),
@@ -53,9 +63,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     status: "live",
     price: 0.0000184,
     change24h: 42.5,
-    description: "On-chain signal desk for Stable degen flow.",
-    creatorFeesEarned: 126,
-    platformFeesEarned: 126,
+    description: "Signal desk for Stable flow.",
+    ...(() => {
+      const f = feesFromVol(12600);
+      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
+    })(),
     imageHue: 168,
   },
   {
@@ -72,9 +84,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     status: "live",
     price: 0.000082,
     change24h: 12.1,
-    description: "Cold storage memes. Hot volume.",
-    creatorFeesEarned: 334,
-    platformFeesEarned: 334,
+    description: "Cold storage memes.",
+    ...(() => {
+      const f = feesFromVol(33400);
+      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
+    })(),
     imageHue: 280,
   },
   {
@@ -91,9 +105,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     status: "live",
     price: 0.0000042,
     change24h: -8.4,
-    description: "Micro-cap grid trading cult.",
-    creatorFeesEarned: 18,
-    platformFeesEarned: 18,
+    description: "Micro-cap grid cult.",
+    ...(() => {
+      const f = feesFromVol(1800);
+      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
+    })(),
     imageHue: 210,
   },
   {
@@ -110,9 +126,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     status: "graduated",
     price: 0.00021,
     change24h: 6.2,
-    description: "Graduated to DEX. LP locked narrative.",
-    creatorFeesEarned: 2100,
-    platformFeesEarned: 2100,
+    description: "Cleared graduation. Same pool.",
+    ...(() => {
+      const f = feesFromVol(89000);
+      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
+    })(),
     imageHue: 40,
   },
   {
@@ -130,8 +148,10 @@ export const DEMO_TOKENS: LaunchToken[] = [
     price: 0.000031,
     change24h: 19.8,
     description: "No CT spam. Just chart.",
-    creatorFeesEarned: 98,
-    platformFeesEarned: 98,
+    ...(() => {
+      const f = feesFromVol(9800);
+      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
+    })(),
     imageHue: 200,
   },
   {
@@ -148,9 +168,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     status: "live",
     price: 0.00011,
     change24h: -3.2,
-    description: "Slow grind bonding curve.",
-    creatorFeesEarned: 221,
-    platformFeesEarned: 221,
+    description: "Slow grind curve.",
+    ...(() => {
+      const f = feesFromVol(22100);
+      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
+    })(),
     imageHue: 130,
   },
   {
@@ -167,9 +189,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     status: "graduated",
     price: 0.00048,
     change24h: 28.4,
-    description: "High-conviction launch that cleared the bar.",
-    creatorFeesEarned: 4200,
-    platformFeesEarned: 4200,
+    description: "High-conviction clear.",
+    ...(() => {
+      const f = feesFromVol(150000);
+      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
+    })(),
     imageHue: 350,
   },
   {
@@ -186,9 +210,11 @@ export const DEMO_TOKENS: LaunchToken[] = [
     status: "live",
     price: 0.0000018,
     change24h: 4.0,
-    description: "Fresh deploy. Thin book. High risk.",
-    creatorFeesEarned: 6,
-    platformFeesEarned: 6,
+    description: "Fresh. Thin book.",
+    ...(() => {
+      const f = feesFromVol(620);
+      return { creatorFeesEarned: f.creator, platformFeesEarned: f.platform };
+    })(),
     imageHue: 20,
   },
 ];
@@ -204,14 +230,6 @@ export const DEMO_ACTIVITY: Activity[] = [
   { id: "8", kind: "buy", token: addr(0x2222), symbol: "VCAT", trader: addr(0xb006), amountUsd: 500, ts: now() - 700 },
 ];
 
-export function feeSplitLabel() {
-  return {
-    platform: PLATFORM_FEE_BPS,
-    creator: CREATOR_FEE_BPS,
-    total: PLATFORM_FEE_BPS + CREATOR_FEE_BPS,
-  };
-}
-
 export function createDemoToken(input: {
   name: string;
   symbol: string;
@@ -220,7 +238,8 @@ export function createDemoToken(input: {
   firstBuy?: number;
 }): LaunchToken {
   const raised = Math.max(0, Number(input.firstBuy) || 0);
-  const t: LaunchToken = {
+  const f = feeSplit(raised);
+  return {
     address: addr(0x9000 + Math.floor(Math.random() * 0xffff)),
     name: input.name,
     symbol: input.symbol.toUpperCase().slice(0, 10),
@@ -234,10 +253,13 @@ export function createDemoToken(input: {
     status: raised >= GRAD_TARGET ? "graduated" : "live",
     price: 0.000001 + raised / 1e9,
     change24h: 0,
-    description: input.description || "New launch on LPX Pad.",
-    creatorFeesEarned: (raised * CREATOR_FEE_BPS) / 10_000,
-    platformFeesEarned: (raised * PLATFORM_FEE_BPS) / 10_000,
+    description: input.description || "",
+    creatorFeesEarned: f.creator,
+    platformFeesEarned: f.platform,
     imageHue: Math.floor(Math.random() * 360),
   };
-  return t;
 }
+
+// keep unused import noise down for older references
+void CREATOR_FEE_BPS;
+void PLATFORM_FEE_BPS;

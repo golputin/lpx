@@ -1,42 +1,24 @@
-# LPX Pad
+# LPX
 
-Bonding-curve **token launchpad** for **Stable Network (chain 988)**.
+Token launchpad UI for **Stable (988)**.
 
-Inspired by the product shape of Quiver / Pons-style pads:
-- Explore trenches (live + graduated)
-- Create token with optional first buy
-- **Creator fee on every trade** + platform fee
-- Token page with curve progress + trade panel
+## Fee model
 
-## Fee model (defaults)
+| | |
+|---|---|
+| Trade fee | **1.00%** |
+| Creator share | **80%** of trade fee (≈ **0.80%** volume) |
+| Platform share | **20%** of trade fee (≈ **0.20%** volume) |
+| Graduation | **$20,000** USDT0 |
 
-| Fee | BPS | % |
-|---|---:|---:|
-| Creator | 100 | 1.00% |
-| Platform | 100 | 1.00% |
-| Graduation target | — | $20,000 USDT0 |
-
-## Stack
-
-- Next.js 14 (App Router) at repo root — Vercel-ready
-- Demo mode when `NEXT_PUBLIC_FACTORY` is empty (localStorage launches)
-- Optional Hardhat contracts remain under `onchain/` for later wiring
+Example: `$10,000` volume → `$100` fee → **creator $80** · platform $20.
 
 ## Dev
 
 ```bash
 npm install
-npm run dev    # http://localhost:3007
+npm run dev
 npm run build
 ```
 
-## Env
-
-```bash
-NEXT_PUBLIC_FACTORY=0x...   # set after factory deploy to leave demo mode
-```
-
-## Notes
-
-This release is a **production-shaped UI** with demo state.
-Wire factory / curve contracts next for real deploys on Stable.
+Demo mode until `NEXT_PUBLIC_FACTORY` is set.
