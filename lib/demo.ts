@@ -46,7 +46,7 @@ export function claimableFees(t: LaunchToken) {
 
 export type Activity = {
   id: string;
-  kind: "buy" | "sell" | "launch" | "graduate";
+  kind: "buy" | "sell";
   token: string;
   symbol: string;
   trader: string;
@@ -261,15 +261,16 @@ export const DEMO_TOKENS: LaunchToken[] = [
 export const DEMO_ACTIVITY: Activity[] = [
   { id: "1", kind: "buy", token: addr(0x1111), symbol: "SIG", trader: addr(0xb001), amountUsd: 120, ts: now() - 40 },
   { id: "2", kind: "sell", token: addr(0x2222), symbol: "VCAT", trader: addr(0xb002), amountUsd: 85, ts: now() - 90 },
-  { id: "3", kind: "launch", token: addr(0x8888), symbol: "DUST", trader: addr(0xaaa8), amountUsd: 0, ts: now() - 900 },
+  { id: "3", kind: "buy", token: addr(0x8888), symbol: "DUST", trader: addr(0xb008), amountUsd: 32, ts: now() - 120 },
   { id: "4", kind: "buy", token: addr(0x5555), symbol: "QUIET", trader: DEMO_WALLET, amountUsd: 250, ts: now() - 200 },
-  { id: "5", kind: "graduate", token: addr(0x4444), symbol: "NSTR", trader: addr(0xaaa4), amountUsd: GRAD_TARGET, ts: now() - 80000 },
+  { id: "5", kind: "sell", token: addr(0x4444), symbol: "NSTR", trader: addr(0xb003), amountUsd: 180, ts: now() - 260 },
   { id: "6", kind: "buy", token: addr(0x6666), symbol: "LEAF", trader: addr(0xb004), amountUsd: 64, ts: now() - 300 },
   { id: "7", kind: "sell", token: addr(0x1111), symbol: "SIG", trader: DEMO_WALLET, amountUsd: 40, ts: now() - 500 },
   { id: "8", kind: "buy", token: addr(0x2222), symbol: "VCAT", trader: addr(0xb006), amountUsd: 500, ts: now() - 700 },
-  { id: "9", kind: "launch", token: addr(0x1111), symbol: "SIG", trader: DEMO_WALLET, amountUsd: 50, ts: now() - 420 },
-  { id: "10", kind: "launch", token: addr(0x2222), symbol: "VCAT", trader: DEMO_WALLET, amountUsd: 100, ts: now() - 3600 },
-  { id: "11", kind: "launch", token: addr(0x5555), symbol: "QUIET", trader: DEMO_WALLET, amountUsd: 25, ts: now() - 1400 },
+  { id: "9", kind: "buy", token: addr(0x1111), symbol: "SIG", trader: DEMO_WALLET, amountUsd: 50, ts: now() - 420 },
+  { id: "10", kind: "sell", token: addr(0x5555), symbol: "QUIET", trader: addr(0xb007), amountUsd: 22, ts: now() - 800 },
+  { id: "11", kind: "buy", token: addr(0x6666), symbol: "LEAF", trader: addr(0xb009), amountUsd: 95, ts: now() - 1000 },
+  { id: "12", kind: "sell", token: addr(0x2222), symbol: "VCAT", trader: addr(0xb00a), amountUsd: 140, ts: now() - 1200 },
 ];
 
 export function createDemoToken(input: {

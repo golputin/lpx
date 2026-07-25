@@ -6,6 +6,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BrowserProvider } from "ethers";
 import {
   APP_NAME,
+  APP_TAGLINE,
+  TWITTER_HANDLE,
+  TWITTER_URL,
   CHAIN_ID,
   CHAIN_NAME,
   DEMO_MODE,
@@ -419,8 +422,10 @@ export default function TokenPage() {
         <Link href="/" className="logo">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="" />
-          {APP_NAME}
-          <span>/{CHAIN_ID}</span>
+          <div className="logo-text">
+            <b>{APP_NAME}</b>
+            <span>{APP_TAGLINE}</span>
+          </div>
         </Link>
         <nav className="menu">
           <Link href="/" className="nav-link">
@@ -438,6 +443,9 @@ export default function TokenPage() {
           <span className="pill">
             <b>●</b> {CHAIN_NAME}
           </span>
+          <a className="pill" href={TWITTER_URL} target="_blank" rel="noreferrer">
+            @{TWITTER_HANDLE}
+          </a>
           {!DEMO_MODE && (
             <a className="pill" href={explorerAddress(FACTORY_ADDRESS)} target="_blank" rel="noreferrer">
               live · {shortAddr(FACTORY_ADDRESS, 3)}
@@ -701,8 +709,11 @@ export default function TokenPage() {
 
       <footer className="foot">
         <span>
-          {APP_NAME} · {CHAIN_NAME} {CHAIN_ID}
+          {APP_NAME} {APP_TAGLINE} · {CHAIN_NAME} {CHAIN_ID}
         </span>
+        <a href={TWITTER_URL} target="_blank" rel="noreferrer" className="foot-x">
+          @{TWITTER_HANDLE}
+        </a>
         <span>
           fee {bpsToPct(TRADE_FEE_BPS)} · Uni V3
         </span>

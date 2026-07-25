@@ -1,5 +1,8 @@
-export const APP_NAME = "LPX";
-export const APP_TAGLINE = "launchpad";
+export const APP_NAME = "FEFER";
+export const APP_TAGLINE = "LAUNCHPAD";
+export const APP_FULL_NAME = "FEFER LAUNCHPAD";
+export const TWITTER_HANDLE = "Feferdotpw";
+export const TWITTER_URL = "https://x.com/Feferdotpw";
 export const CHAIN_ID = 988;
 export const CHAIN_NAME = "Stable";
 export const RPC_URL = "https://rpc.stable.xyz";

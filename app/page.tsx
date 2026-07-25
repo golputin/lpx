@@ -5,6 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import {
   APP_NAME,
+  APP_FULL_NAME,
+  APP_TAGLINE,
+  TWITTER_HANDLE,
+  TWITTER_URL,
   CHAIN_ID,
   CHAIN_NAME,
   CREATE_GAS_EST_USD,
@@ -59,8 +63,8 @@ type Filter = "all" | "live" | "graduated" | "newest" | "mcap" | "volume";
 type Side = "buy" | "sell";
 type ProfilePane = "launches" | "activity" | "fees";
 
-const STORE_KEY = "lpx_pad_tokens_v4";
-const ACT_KEY = "lpx_pad_activity_v4";
+const STORE_KEY = "fefer_tokens_v1";
+const ACT_KEY = "fefer_activity_v1";
 const MAX_LOGO_BYTES = 1_200_000; // ~1.2MB before base64
 
 function loadTokens(): LaunchToken[] {
@@ -91,9 +95,15 @@ function loadTokens(): LaunchToken[] {
 function loadActivity(): Activity[] {
   if (typeof window === "undefined") return DEMO_MODE ? DEMO_ACTIVITY : [];
   try {
-    const raw = localStorage.getItem(ACT_KEY) || localStorage.getItem("lpx_pad_activity_v3");
+    const raw =
+      localStorage.getItem(ACT_KEY) ||
+      localStorage.getItem("lpx_pad_activity_v4") ||
+      localStorage.getItem("lpx_pad_activity_v3");
     if (!raw) return DEMO_MODE ? DEMO_ACTIVITY : [];
-    return JSON.parse(raw) as Activity[];
+    const parsed = JSON.parse(raw) as Activity[];
+    const clean = (parsed || []).filter((a) => a && (a.kind === "buy" || a.kind === "sell"));
+    if (clean.length) return clean;
+    return DEMO_MODE ? DEMO_ACTIVITY : [];
   } catch {
     return DEMO_MODE ? DEMO_ACTIVITY : [];
   }
@@ -204,30 +214,32 @@ function HomePageInner() {
         if (cancelled) return;
         if (live.length) {
           setTokens(live);
-          setActivity([
-            {
-              id: `launch-${live[0].address}`,
-              kind: "launch",
-              token: live[0].address,
-              symbol: live[0].symbol,
-              trader: live[0].creator,
-              amountUsd: live[0].raised,
-              ts: live[0].createdAt,
-            },
-            ...(live[0].raised > 0
-              ? [
-                  {
-                    id: `buy-${live[0].address}`,
-                    kind: "buy" as const,
-                    token: live[0].address,
-                    symbol: live[0].symbol,
-                    trader: live[0].creator,
-                    amountUsd: live[0].raised,
-                    ts: live[0].createdAt + 1,
-                  },
-                ]
-              : []),
-          ]);
+          // activity feed is BUY/SELL only (no launch/graduate rows)
+          const seed: Activity[] = [];
+          for (const t of live.slice(0, 8)) {
+            if ((t.raised || 0) > 0) {
+              seed.push({
+                id: `buy-${t.address}`,
+                kind: "buy",
+                token: t.address,
+                symbol: t.symbol,
+                trader: t.creator,
+                amountUsd: Math.max(0.01, t.raised),
+                ts: t.createdAt + 1,
+              });
+            }
+            // light synthetic sell pulse so feed isn't buy-only when quiet
+            seed.push({
+              id: `sell-seed-${t.address}`,
+              kind: "sell",
+              token: t.address,
+              symbol: t.symbol,
+              trader: t.creator,
+              amountUsd: Math.max(0.01, (t.raised || 1) * 0.15),
+              ts: t.createdAt + 2,
+            });
+          }
+          setActivity(seed);
           setMsg(`live · factory ${shortAddr(FACTORY_ADDRESS, 4)} · ${live.length} token`);
         } else {
           setTokens([]);
@@ -534,18 +546,20 @@ function HomePageInner() {
           }
           const live = await loadLiveTokens();
           if (live.length) setTokens(live);
-          setActivity((prev) => [
-            {
-              id: res.hash,
-              kind: "launch",
-              token: (res.token || "").toLowerCase(),
-              symbol: symbol.trim().toUpperCase(),
-              trader: wallet,
-              amountUsd: Number(firstBuy) || 0,
-              ts: Math.floor(Date.now() / 1000),
-            },
-            ...prev,
-          ]);
+          if ((Number(firstBuy) || 0) > 0 && res.token) {
+            setActivity((prev) => [
+              {
+                id: res.hash,
+                kind: "buy",
+                token: res.token.toLowerCase(),
+                symbol: symbol.trim().toUpperCase(),
+                trader: wallet,
+                amountUsd: Number(firstBuy) || 0,
+                ts: Math.floor(Date.now() / 1000),
+              },
+              ...prev,
+            ]);
+          }
           setMsg(`created · tx ${shortAddr(res.hash, 6)}`);
           setName("");
           setSymbol("");
@@ -589,19 +603,9 @@ function HomePageInner() {
       });
       setTokens((prev) => [t, ...prev]);
       const ts = Math.floor(Date.now() / 1000);
-      const rows: Activity[] = [
-        {
-          id: `${Date.now()}`,
-          kind: "launch",
-          token: t.address,
-          symbol: t.symbol,
-          trader: t.creator,
-          amountUsd: Number(firstBuy) || 0,
-          ts,
-        },
-      ];
+      const rows: Activity[] = [];
       if ((Number(firstBuy) || 0) > 0) {
-        rows.unshift({
+        rows.push({
           id: `${Date.now()}-b`,
           kind: "buy",
           token: t.address,
@@ -611,7 +615,7 @@ function HomePageInner() {
           ts,
         });
       }
-      setActivity((prev) => [...rows, ...prev]);
+      if (rows.length) setActivity((prev) => [...rows, ...prev]);
       setBusy(false);
       setName("");
       setSymbol("");
@@ -773,13 +777,43 @@ function HomePageInner() {
       ? feeSplit(Number(tradeAmt) || 0)
       : { total: quotePreview.fee, creator: quotePreview.fee * (CREATOR_SHARE_BPS / 10000), platform: quotePreview.fee * (PLATFORM_SHARE_BPS / 10000) };
 
+  const tradeFeed = useMemo(
+    () => activity.filter((a) => a.kind === "buy" || a.kind === "sell").slice(0, 40),
+    [activity]
+  );
+  const tickerItems = tradeFeed.length ? tradeFeed : DEMO_ACTIVITY;
+
   return (
     <div className="app">
+      <div className="ticker-wrap" aria-label="live trades">
+        <div className="ticker-label">LIVE</div>
+        <div className="ticker-mask">
+          <div className="ticker-track">
+            {[...tickerItems, ...tickerItems].map((a, i) => (
+              <button
+                type="button"
+                key={`${a.id}-${i}`}
+                className={`ticker-item ${a.kind}`}
+                onClick={() => openToken(a.token)}
+              >
+                <span className="tk">{a.kind.toUpperCase()}</span>
+                <span className="sym">${a.symbol}</span>
+                <span className="amt">{a.amountUsd > 0 ? fmtUsd(a.amountUsd) : ""}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+        <a className="ticker-x" href={TWITTER_URL} target="_blank" rel="noreferrer" title="Twitter">
+          @{TWITTER_HANDLE}
+        </a>
+      </div>
       <header className="top">
         <div className="logo">
           <img src="/logo.svg" alt="" />
-          {APP_NAME}
-          <span>/{CHAIN_ID}</span>
+          <div className="logo-text">
+            <b>{APP_NAME}</b>
+            <span>{APP_TAGLINE}</span>
+          </div>
         </div>
         <nav className="menu">
           <button className={tab === "explore" ? "on" : ""} onClick={() => setTab("explore")}>
@@ -950,9 +984,9 @@ function HomePageInner() {
             </div>
 
             <aside className="side">
-              <h3>activity</h3>
+              <h3>activity · buy / sell</h3>
               <div className="feed">
-                {activity.slice(0, 24).map((a) => {
+                {tradeFeed.slice(0, 24).map((a) => {
                   const tok = tokens.find((t) => t.address === a.token);
                   return (
                     <div className="row" key={a.id} onClick={() => openToken(a.token)}>
@@ -1513,7 +1547,7 @@ function HomePageInner() {
               {profilePane === "activity" && (
                 <div className="card">
                   <h2>your activity</h2>
-                  <p className="sub">buys, sells, launches tied to this wallet</p>
+                  <p className="sub">buys & sells for this wallet</p>
                   <div className="feed profile-feed">
                     {myActivity.map((a) => {
                       const tok = tokens.find((t) => t.address === a.token);
@@ -1616,12 +1650,12 @@ function HomePageInner() {
 
       <footer className="foot">
         <span>
-          {APP_NAME} · {CHAIN_NAME} {CHAIN_ID}
+          {APP_FULL_NAME} · {CHAIN_NAME} {CHAIN_ID}
         </span>
-        <span>
-          fee {bpsToPct(TRADE_FEE_BPS)} · creator {shareToPct(CREATOR_SHARE_BPS)} · platform{" "}
-          {shareToPct(PLATFORM_SHARE_BPS)} · create $0 · grad {fmtUsd(GRAD_TARGET)}
-        </span>
+        <a href={TWITTER_URL} target="_blank" rel="noreferrer" className="foot-x">
+          @{TWITTER_HANDLE}
+        </a>
+        <span>fee {bpsToPct(TRADE_FEE_BPS)} · Uni V3 · create $0</span>
       </footer>
     </div>
   );
