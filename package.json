@@ -1,0 +1,20 @@
+{
+  "name": "stablebox",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:stable": "hardhat run scripts/deploy.js --network stable",
+    "deploy:local": "hardhat run scripts/deploy.js --network hardhat",
+    "node": "hardhat node"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.17"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.1.0",
+    "dotenv": "^16.4.7"
+  }
+}

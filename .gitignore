@@ -1,0 +1,16 @@
+node_modules/
+cache/
+artifacts/
+coverage/
+typechain/
+typechain-types/
+.env
+.env.*
+!.env.example
+deployments/*.json
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env*
+*.log
+.DS_Store
