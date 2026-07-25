@@ -36,6 +36,20 @@ import {
 } from "@/lib/demo";
 import { DEPLOYMENT } from "@/lib/deployment";
 import { explorerAddress, loadLiveTokens } from "@/lib/onchain";
+import type { BrowserProvider } from "ethers";
+import {
+  buyOnCurve,
+  connectWallet,
+  createTokenOnFactory,
+  formatTradeError,
+  getInjected,
+  getNativeBalance,
+  getTokenBalance,
+  quoteBuy,
+  quoteSell,
+  sellOnCurve,
+  txUrl,
+} from "@/lib/wallet";
 
 type Tab = "explore" | "create" | "token" | "profile";
 type Filter = "all" | "live" | "graduated" | "newest" | "mcap" | "volume";
@@ -139,11 +153,17 @@ export default function HomePage() {
   const [activity, setActivity] = useState<Activity[]>(DEMO_MODE ? DEMO_ACTIVITY : []);
   const [selected, setSelected] = useState<string | null>(null);
   const [side, setSide] = useState<Side>("buy");
-  const [tradeAmt, setTradeAmt] = useState("100");
+  const [tradeAmt, setTradeAmt] = useState("1");
   const [msg, setMsg] = useState<string | null>(null);
   const [profilePane, setProfilePane] = useState<ProfilePane>("launches");
   const [claimBusy, setClaimBusy] = useState<string | null>(null);
   const [chainLoading, setChainLoading] = useState(!DEMO_MODE);
+  const [provider, setProvider] = useState<BrowserProvider | null>(null);
+  const [nativeBal, setNativeBal] = useState(0);
+  const [tokenBal, setTokenBal] = useState(0);
+  const [quotePreview, setQuotePreview] = useState<{ out: number; fee: number }>({ out: 0, fee: 0 });
+  const [tradeBusy, setTradeBusy] = useState(false);
+  const [walletBusy, setWalletBusy] = useState(false);
 
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
@@ -284,9 +304,113 @@ export default function HomePage() {
     return { earned, claimed, claimable, count: myLaunches.length };
   }, [myLaunches]);
 
-  function connect() {
-    setWallet(DEMO_WALLET);
-    setMsg("connected (demo)");
+  useEffect(() => {
+    if (!wallet) return;
+    refreshBalances(wallet, provider, active);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wallet, active?.address, provider]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const amt = Math.max(0, Number(tradeAmt) || 0);
+      if (!active || amt <= 0) {
+        if (!cancelled) setQuotePreview({ out: 0, fee: 0 });
+        return;
+      }
+      if (DEMO_MODE || !active.curve) {
+        const split = feeSplit(amt);
+        if (side === "buy") {
+          const tokens = active.price > 0 ? (amt - split.total) / Math.max(active.price, 1e-12) : 0;
+          if (!cancelled) setQuotePreview({ out: tokens, fee: split.total });
+        } else {
+          const quote = amt * active.price;
+          const s = feeSplit(quote);
+          if (!cancelled) setQuotePreview({ out: Math.max(0, quote - s.total), fee: s.total });
+        }
+        return;
+      }
+      try {
+        if (side === "buy") {
+          const q = await quoteBuy(active.curve, amt);
+          if (!cancelled) setQuotePreview({ out: q.tokensOut, fee: q.fee });
+        } else {
+          const q = await quoteSell(active.curve, amt);
+          if (!cancelled) setQuotePreview({ out: q.quoteOut, fee: q.fee });
+        }
+      } catch {
+        if (!cancelled) setQuotePreview({ out: 0, fee: 0 });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tradeAmt, side, active, DEMO_MODE]);
+
+
+  async function refreshBalances(addr: string, prov?: BrowserProvider | null, tok?: LaunchToken | null) {
+    try {
+      const native = await getNativeBalance(addr, prov || undefined);
+      setNativeBal(native);
+      if (tok?.address && !DEMO_MODE) {
+        const tb = await getTokenBalance(tok.address, addr, prov || undefined);
+        setTokenBal(tb);
+      } else if (DEMO_MODE) {
+        setTokenBal(0);
+      } else {
+        setTokenBal(0);
+      }
+    } catch (e) {
+      console.warn("balance", e);
+    }
+  }
+
+  async function connect() {
+    if (DEMO_MODE) {
+      setWallet(DEMO_WALLET);
+      setNativeBal(12.5);
+      setTokenBal(25000);
+      setMsg("connected (demo wallet)");
+      return;
+    }
+    setWalletBusy(true);
+    try {
+      const { address, provider: prov } = await connectWallet();
+      setWallet(address);
+      setProvider(prov);
+      await refreshBalances(address, prov, null);
+      setMsg(`connected ${shortAddr(address, 4)} · Stable ${CHAIN_ID}`);
+      const eth = getInjected();
+      eth?.on?.("accountsChanged", (accs: unknown) => {
+        const list = accs as string[];
+        if (!list?.length) {
+          setWallet(null);
+          setProvider(null);
+          setNativeBal(0);
+          setTokenBal(0);
+          setMsg("wallet disconnected");
+          return;
+        }
+        const next = list[0].toLowerCase();
+        setWallet(next);
+        refreshBalances(next, prov, null);
+      });
+      eth?.on?.("chainChanged", () => {
+        window.location.reload();
+      });
+    } catch (e) {
+      setMsg(formatTradeError(e));
+    } finally {
+      setWalletBusy(false);
+    }
+  }
+
+  function disconnect() {
+    setWallet(null);
+    setProvider(null);
+    setNativeBal(0);
+    setTokenBal(0);
+    setMsg("disconnected");
   }
 
   function openProfile() {
@@ -369,10 +493,47 @@ export default function HomePage() {
       return;
     }
     if (!DEMO_MODE) {
-      setMsg(
-        `factory live ${shortAddr(FACTORY_ADDRESS, 4)} — browser wallet create coming next. test token: ${DEPLOYMENT.test.symbol}`
-      );
-      if (DEPLOYMENT.test?.token) openToken(DEPLOYMENT.test.token.toLowerCase());
+      if (!wallet || !provider) {
+        setMsg("connect wallet to create on-chain");
+        return;
+      }
+      setBusy(true);
+      setMsg("confirm createToken in wallet…");
+      (async () => {
+        try {
+          const res = await createTokenOnFactory({
+            provider,
+            name: name.trim(),
+            symbol: symbol.trim().toUpperCase(),
+            firstBuy: Number(firstBuy) || 0,
+          });
+          const live = await loadLiveTokens();
+          if (live.length) setTokens(live);
+          setActivity((prev) => [
+            {
+              id: res.hash,
+              kind: "launch",
+              token: (res.token || "").toLowerCase(),
+              symbol: symbol.trim().toUpperCase(),
+              trader: wallet,
+              amountUsd: Number(firstBuy) || 0,
+              ts: Math.floor(Date.now() / 1000),
+            },
+            ...prev,
+          ]);
+          setMsg(`created · tx ${shortAddr(res.hash, 6)}`);
+          setName("");
+          setSymbol("");
+          setDesc("");
+          clearLogo();
+          if (res.token) openToken(res.token.toLowerCase());
+          await refreshBalances(wallet, provider, null);
+        } catch (e) {
+          setMsg(formatTradeError(e));
+        } finally {
+          setBusy(false);
+        }
+      })();
       return;
     }
     setBusy(true);
@@ -428,55 +589,150 @@ export default function HomePage() {
     }, 350);
   }
 
-  function simulateTrade() {
+  function setPct(pct: number) {
+    if (side === "buy") {
+      const gasBuffer = DEMO_MODE ? 0 : 0.02;
+      const usable = Math.max(0, nativeBal - gasBuffer);
+      const v = (usable * pct) / 100;
+      setTradeAmt(v > 0 ? (Math.floor(v * 1e4) / 1e4).toString() : "0");
+    } else {
+      const v = (tokenBal * pct) / 100;
+      setTradeAmt(v > 0 ? (Math.floor(v * 1e4) / 1e4).toString() : "0");
+    }
+  }
+
+  async function executeTrade() {
     if (!active) return;
     const amt = Math.max(0, Number(tradeAmt) || 0);
     if (amt <= 0) {
-      setMsg("bad amount");
+      setMsg("enter amount");
       return;
     }
-    const split = feeSplit(amt);
-    const net = amt - split.total;
-    setTokens((prev) =>
-      prev.map((t) => {
-        if (t.address !== active.address) return t;
-        const raisedDelta = side === "buy" ? net : -net * 0.9;
-        const raised = Math.max(0, t.raised + raisedDelta);
-        const progress = Math.min(100, (raised / GRAD_TARGET) * 100);
-        return {
-          ...t,
-          raised,
-          progress,
-          mcap: Math.max(500, t.mcap + (side === "buy" ? amt * 3.2 : -amt * 2.4)),
-          vol24h: t.vol24h + amt,
-          holders: side === "buy" ? t.holders + (Math.random() > 0.6 ? 1 : 0) : t.holders,
-          price: Math.max(0.0000001, t.price * (side === "buy" ? 1.02 : 0.985)),
-          change24h: t.change24h + (side === "buy" ? 1.2 : -0.9),
-          creatorFeesEarned: t.creatorFeesEarned + split.creator,
-          creatorFeesClaimed: t.creatorFeesClaimed || 0,
-          platformFeesEarned: t.platformFeesEarned + split.platform,
-          status: raised >= GRAD_TARGET ? "graduated" : t.status,
-        };
-      })
-    );
-    setActivity((prev) => [
-      {
-        id: `${Date.now()}`,
-        kind: side,
-        token: active.address,
-        symbol: active.symbol,
-        trader: wallet || "0xdemo0000000000000000000000000000000001",
-        amountUsd: amt,
-        ts: Math.floor(Date.now() / 1000),
-      },
-      ...prev,
-    ]);
-    setMsg(
-      `${side} ${fmtUsd(amt)} · fee ${fmtUsd(split.total)} → creator ${fmtUsd(split.creator)} (${shareToPct(CREATOR_SHARE_BPS)})`
-    );
+    if (!wallet) {
+      setMsg("connect wallet first");
+      await connect();
+      return;
+    }
+
+    if (DEMO_MODE) {
+      const split = feeSplit(amt);
+      const net = side === "buy" ? amt - split.total : amt;
+      setTokens((prev) =>
+        prev.map((t) => {
+          if (t.address !== active.address) return t;
+          const raisedDelta = side === "buy" ? net : -Math.min(t.raised, amt * active.price * 0.99);
+          const raised = Math.max(0, t.raised + raisedDelta);
+          const progress = Math.min(100, (raised / GRAD_TARGET) * 100);
+          return {
+            ...t,
+            raised,
+            progress,
+            mcap: Math.max(500, t.mcap + (side === "buy" ? amt * 3.2 : -amt * 2.4)),
+            vol24h: t.vol24h + (side === "buy" ? amt : amt * active.price),
+            holders: side === "buy" ? t.holders + (Math.random() > 0.6 ? 1 : 0) : t.holders,
+            price: Math.max(0.0000001, t.price * (side === "buy" ? 1.02 : 0.985)),
+            change24h: t.change24h + (side === "buy" ? 1.2 : -0.9),
+            creatorFeesEarned: t.creatorFeesEarned + split.creator,
+            creatorFeesClaimed: t.creatorFeesClaimed || 0,
+            platformFeesEarned: t.platformFeesEarned + split.platform,
+            status: raised >= GRAD_TARGET ? "graduated" : t.status,
+          };
+        })
+      );
+      setActivity((prev) => [
+        {
+          id: `${Date.now()}`,
+          kind: side,
+          token: active.address,
+          symbol: active.symbol,
+          trader: wallet,
+          amountUsd: side === "buy" ? amt : amt * active.price,
+          ts: Math.floor(Date.now() / 1000),
+        },
+        ...prev,
+      ]);
+      if (side === "buy") {
+        setNativeBal((b) => Math.max(0, b - amt));
+        setTokenBal((b) => b + quotePreview.out);
+      } else {
+        setTokenBal((b) => Math.max(0, b - amt));
+        setNativeBal((b) => b + quotePreview.out);
+      }
+      setMsg(
+        `${side} ${side === "buy" ? fmtUsd(amt) : fmt(amt) + " " + active.symbol} · fee ${fmtUsd(split.total)}`
+      );
+      return;
+    }
+
+    if (!provider) {
+      setMsg("reconnect wallet");
+      return;
+    }
+    const curve = active.curve || DEPLOYMENT.test?.curve;
+    if (!curve) {
+      setMsg("curve address missing");
+      return;
+    }
+    if (active.status === "graduated") {
+      setMsg("token graduated — trade on DEX");
+      return;
+    }
+
+    setTradeBusy(true);
+    setMsg(side === "buy" ? "confirm buy in wallet…" : "confirm sell in wallet…");
+    try {
+      if (side === "buy") {
+        if (amt > nativeBal + 1e-9) throw new Error(`Need ${amt} USDT0, bal ${nativeBal.toFixed(4)}`);
+        const res = await buyOnCurve({ provider, curve, amountUsdt0: amt });
+        setActivity((prev) => [
+          {
+            id: res.hash,
+            kind: "buy",
+            token: active.address,
+            symbol: active.symbol,
+            trader: wallet,
+            amountUsd: amt,
+            ts: Math.floor(Date.now() / 1000),
+          },
+          ...prev,
+        ]);
+        setMsg(`bought · tx ${shortAddr(res.hash, 6)}`);
+      } else {
+        if (amt > tokenBal + 1e-9) throw new Error(`Need ${amt} ${active.symbol}, bal ${tokenBal.toFixed(4)}`);
+        const res = await sellOnCurve({
+          provider,
+          curve,
+          token: active.address,
+          tokensIn: amt,
+        });
+        setActivity((prev) => [
+          {
+            id: res.hash,
+            kind: "sell",
+            token: active.address,
+            symbol: active.symbol,
+            trader: wallet,
+            amountUsd: res.quoteOut || 0,
+            ts: Math.floor(Date.now() / 1000),
+          },
+          ...prev,
+        ]);
+        setMsg(`sold · ~${fmtUsd(res.quoteOut || 0)} · ${shortAddr(res.hash, 6)}`);
+      }
+      const live = await loadLiveTokens();
+      if (live.length) setTokens(live);
+      await refreshBalances(wallet, provider, active);
+    } catch (e) {
+      setMsg(formatTradeError(e));
+    } finally {
+      setTradeBusy(false);
+    }
   }
 
-  const tradePreview = feeSplit(Number(tradeAmt) || 0);
+  const tradePreview =
+    side === "buy"
+      ? feeSplit(Number(tradeAmt) || 0)
+      : { total: quotePreview.fee, creator: quotePreview.fee * (CREATOR_SHARE_BPS / 10000), platform: quotePreview.fee * (PLATFORM_SHARE_BPS / 10000) };
 
   return (
     <div className="app">
@@ -529,9 +785,16 @@ export default function HomePage() {
           <button className="btn" onClick={openProfile}>
             {wallet ? "profile" : "profile"}
           </button>
-          <button className="btn green" onClick={connect}>
-            {wallet ? shortAddr(wallet, 3) : "connect"}
-          </button>
+          {wallet ? (
+            <button className="btn wallet-btn" onClick={disconnect} title="disconnect">
+              <span>{shortAddr(wallet, 3)}</span>
+              <span className="bal-chip">{fmt(nativeBal, 3)} {QUOTE_SYMBOL}</span>
+            </button>
+          ) : (
+            <button className="btn green" onClick={connect} disabled={walletBusy}>
+              {walletBusy ? "connecting…" : "connect"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -943,50 +1206,90 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="card">
+                            <div className="card trade-card">
                 <div className="tabs2">
-                  <button className={side === "buy" ? "on buy" : ""} onClick={() => setSide("buy")}>
+                  <button
+                    className={side === "buy" ? "on buy" : ""}
+                    onClick={() => {
+                      setSide("buy");
+                      setTradeAmt("1");
+                    }}
+                  >
                     buy
                   </button>
-                  <button className={side === "sell" ? "on sell" : ""} onClick={() => setSide("sell")}>
+                  <button
+                    className={side === "sell" ? "on sell" : ""}
+                    onClick={() => {
+                      setSide("sell");
+                      setTradeAmt("");
+                    }}
+                  >
                     sell
                   </button>
                 </div>
+
+                <div className="bal-row">
+                  <span>wallet balance</span>
+                  <b className="mono">
+                    {side === "buy"
+                      ? `${fmt(nativeBal, 4)} ${QUOTE_SYMBOL}`
+                      : `${fmt(tokenBal, 4)} ${active.symbol}`}
+                  </b>
+                </div>
+
                 <div className="field">
-                  <label>amount ({QUOTE_SYMBOL})</label>
+                  <label>{side === "buy" ? `pay (${QUOTE_SYMBOL})` : `sell (${active.symbol})`}</label>
                   <input
                     type="number"
                     min={0}
+                    step="any"
                     value={tradeAmt}
+                    placeholder="0.0"
                     onChange={(e) => setTradeAmt(e.target.value)}
                   />
                 </div>
-                <div className="lines" style={{ marginTop: 8 }}>
+
+                <div className="pct-row">
+                  {[25, 50, 75, 100].map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      className="pct"
+                      onClick={() => setPct(p)}
+                      disabled={!wallet}
+                    >
+                      {p === 100 ? "MAX" : `${p}%`}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="lines" style={{ marginTop: 10 }}>
                   <div className="ln">
-                    <span>trade fee ({bpsToPct(TRADE_FEE_BPS)})</span>
-                    <b>{fmtUsd(tradePreview.total)}</b>
+                    <span>you receive</span>
+                    <b className="up">
+                      {side === "buy"
+                        ? `${fmt(quotePreview.out, 4)} ${active.symbol}`
+                        : `${fmt(quotePreview.out, 4)} ${QUOTE_SYMBOL}`}
+                    </b>
                   </div>
                   <div className="ln">
-                    <span>creator ({shareToPct(CREATOR_SHARE_BPS)})</span>
+                    <span>trade fee ({bpsToPct(TRADE_FEE_BPS)})</span>
+                    <b>{fmtUsd(tradePreview.total || quotePreview.fee)}</b>
+                  </div>
+                  <div className="ln">
+                    <span>creator cut ({shareToPct(CREATOR_SHARE_BPS)})</span>
                     <b className="up">{fmtUsd(tradePreview.creator)}</b>
                   </div>
                   <div className="ln">
-                    <span>platform ({shareToPct(PLATFORM_SHARE_BPS)})</span>
+                    <span>platform cut ({shareToPct(PLATFORM_SHARE_BPS)})</span>
                     <b>{fmtUsd(tradePreview.platform)}</b>
                   </div>
                   <div className="ln">
-                    <span>creator earned</span>
-                    <b className="up">{fmtUsd(active.creatorFeesEarned)}</b>
-                  </div>
-                  <div className="ln">
-                    <span>claimable</span>
-                    <b className="up">{fmtUsd(claimableFees(active))}</b>
-                  </div>
-                  <div className="ln">
-                    <span>creator wallet</span>
+                    <span>creator</span>
                     <b className="mono">{shortAddr(active.creator, 4)}</b>
                   </div>
                 </div>
+
                 {wallet && active.creator.toLowerCase() === me && claimableFees(active) > 0 && (
                   <button
                     className="btn green block"
@@ -997,13 +1300,32 @@ export default function HomePage() {
                     {claimBusy === active.address ? "claiming…" : `claim ${fmtUsd(claimableFees(active))}`}
                   </button>
                 )}
-                <button
-                  className={`btn lg block ${side === "buy" ? "green" : "red"}`}
-                  style={{ marginTop: 12 }}
-                  onClick={simulateTrade}
-                >
-                  {side === "buy" ? "buy" : "sell"}
-                </button>
+
+                {!wallet ? (
+                  <button
+                    className="btn lg block green"
+                    style={{ marginTop: 12 }}
+                    onClick={connect}
+                    disabled={walletBusy}
+                  >
+                    {walletBusy ? "connecting…" : "connect wallet to trade"}
+                  </button>
+                ) : (
+                  <button
+                    className={`btn lg block ${side === "buy" ? "green" : "red"}`}
+                    style={{ marginTop: 12 }}
+                    disabled={tradeBusy || active.status === "graduated"}
+                    onClick={executeTrade}
+                  >
+                    {tradeBusy
+                      ? "confirm in wallet…"
+                      : active.status === "graduated"
+                        ? "graduated"
+                        : side === "buy"
+                          ? `buy ${active.symbol}`
+                          : `sell ${active.symbol}`}
+                  </button>
+                )}
                 {msg && <div className="note">{msg}</div>}
               </div>
             </div>

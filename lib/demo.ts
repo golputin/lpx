@@ -25,6 +25,8 @@ export type LaunchToken = {
   price: number;
   change24h: number;
   description: string;
+  /** bonding curve address (live) */
+  curve?: string;
   /** lifetime creator fee accrued from trades */
   creatorFeesEarned: number;
   /** already claimed by creator */
