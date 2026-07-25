@@ -343,10 +343,10 @@ function HomePageInner() {
       }
       try {
         if (side === "buy") {
-          const q = await quoteBuy(active.curve, amt);
+          const q = await quoteBuy(active.curve, amt, active.address);
           if (!cancelled) setQuotePreview({ out: q.tokensOut, fee: q.fee });
         } else {
-          const q = await quoteSell(active.curve, amt);
+          const q = await quoteSell(active.curve, amt, active.address);
           if (!cancelled) setQuotePreview({ out: q.quoteOut, fee: q.fee });
         }
       } catch {
@@ -706,13 +706,9 @@ function HomePageInner() {
       setMsg("reconnect wallet");
       return;
     }
-    const curve = active.curve || DEPLOYMENT.test?.curve;
+    const curve = active.curve || DEPLOYMENT.test?.pool;
     if (!curve) {
-      setMsg("curve address missing");
-      return;
-    }
-    if (active.status === "graduated") {
-      setMsg("token graduated — trade on DEX");
+      setMsg("pool address missing");
       return;
     }
 
@@ -721,7 +717,12 @@ function HomePageInner() {
     try {
       if (side === "buy") {
         if (amt > nativeBal + 1e-9) throw new Error(`Need ${amt} USDT0, bal ${nativeBal.toFixed(4)}`);
-        const res = await buyOnCurve({ provider, curve, amountUsdt0: amt });
+        const res = await buyOnCurve({
+          provider,
+          curve,
+          token: active.address,
+          amountUsdt0: amt,
+        });
         setActivity((prev) => [
           {
             id: res.hash,

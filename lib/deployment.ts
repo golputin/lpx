@@ -1,16 +1,25 @@
 export const DEPLOYMENT = {
-  "factory": "0xd6C800f5582Ad2E34C21171286161D9E0F5CdC96",
-  "chainId": 988,
-  "rpc": "https://rpc.stable.xyz",
-  "explorer": "https://stable.blockscout.com",
-  "weth": "0x817997Ca8394E26CCE3dE3A076a4889b27DbF9dE",
-  "dyorRouter": "0xA06b6d992C214d41d170321a520A800A85aCDb71",
-  "test": {
-    "name": "TEST Token",
-    "symbol": "TEST",
-    "token": "0xcad717573953283e5BFcA1fC1b89B7A7a4C60d8a",
-    "curve": "0x6f3F6f084DCA2aB19e7D86eA2d0E07d59745d791",
-    "createTx": "0x3b66822361f95607c84eba67f0784ac03e180909be71ea0c9712a007061faac0",
-    "raised": "0.99"
-  }
-} as const;
+  mode: "stablepad-v3" as const,
+  factory: "0xBecc3b11E6dE1c0cc2fBcb4827533Aa440a953C6",
+  chainId: 988,
+  rpc: "https://rpc.stable.xyz",
+  explorer: "https://stablescan.xyz",
+  deployer: "0xf34A31374BCEB04E3479EaC8a53eB6E600CAA89f",
+  quoteToken: "0x779Ded0c9e1022225f8E0630b35a9b54bE713736",
+  quoteDecimals: 6,
+  v3Factory: "0x88F0a512eF09175D456bc9547f914f48C013E4aA",
+  swapRouter: "0xb070179E7032CdA868b53e6C1742F80c9e940d1A",
+  poolFee: 10000,
+  startMarketCapUsd: 3000,
+  legacyFactory: "0xd6C800f5582Ad2E34C21171286161D9E0F5CdC96",
+  weth: "0x817997Ca8394E26CCE3dE3A076a4889b27DbF9dE",
+  dyorRouter: "0xA06b6d992C214d41d170321a520A800A85aCDb71",
+  test: {
+    name: "LPX Pad Test",
+    symbol: "LPXT",
+    token: "0x19d2f1Cd5535758b25352bC99E355cA224c6C3EC",
+    pool: "0x8B90d277c6EB8Ed8D0DFe30D4267Dd557DFa6C52",
+    createTx: "0xfc0167aae2060060bd1677e2bbfe6b3a14d4f071a9f44e872ce1fc22408e91a7",
+    startMcap: "3000",
+  },
+};

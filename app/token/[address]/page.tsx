@@ -192,7 +192,7 @@ export default function TokenPage() {
             name: "Token",
             symbol: shortAddr(address, 2).replace("…", "").toUpperCase() || "TKN",
             creator: "0x0000000000000000000000000000000000000000",
-            curve: DEPLOYMENT.test?.curve,
+            curve: DEPLOYMENT.test?.pool,
             createdAt: Math.floor(Date.now() / 1000),
             raised: 0,
             mcap: 0,
@@ -280,10 +280,10 @@ export default function TokenPage() {
       }
       try {
         if (side === "buy") {
-          const q = await quoteBuy(token.curve, amt);
+          const q = await quoteBuy(token.curve, amt, token.address);
           if (!cancelled) setQuotePreview({ out: q.tokensOut, fee: q.fee });
         } else {
-          const q = await quoteSell(token.curve, amt);
+          const q = await quoteSell(token.curve, amt, token.address);
           if (!cancelled) setQuotePreview({ out: q.quoteOut, fee: q.fee });
         }
       } catch {
@@ -378,20 +378,21 @@ export default function TokenPage() {
       setMsg("reconnect wallet");
       return;
     }
-    const curve = token.curve || DEPLOYMENT.test?.curve;
+    const curve = token.curve || DEPLOYMENT.test?.pool;
     if (!curve) {
-      setMsg("curve missing");
-      return;
-    }
-    if (token.status === "graduated") {
-      setMsg("graduated — trade on DEX");
+      setMsg("pool missing");
       return;
     }
     setTradeBusy(true);
     setMsg(side === "buy" ? "confirm buy in wallet…" : "confirm sell in wallet…");
     try {
       if (side === "buy") {
-        const res = await buyOnCurve({ provider, curve, amountUsdt0: amt });
+        const res = await buyOnCurve({
+          provider,
+          curve,
+          token: token.address,
+          amountUsdt0: amt,
+        });
         setMsg(`bought · ${shortAddr(res.hash, 6)}`);
       } else {
         const res = await sellOnCurve({
@@ -537,7 +538,7 @@ export default function TokenPage() {
               </div>
               <div className="head-right">
                 <span className={`tag ${token.status === "graduated" ? "grad" : "live"}`}>
-                  {token.status === "graduated" ? "DEX" : "curve"}
+                  {token.status === "graduated" ? "open" : "launch"}
                 </span>
                 <button type="button" className="btn" onClick={() => setMetaOpen((v) => !v)}>
                   {metaOpen ? "close" : "edit info"}
@@ -545,16 +546,16 @@ export default function TokenPage() {
               </div>
             </div>
 
-            <div className={`status-banner ${token.status === "graduated" ? "ok" : "warn"}`}>
+            <div className={`status-banner ${token.status === "graduated" ? "ok" : "ok"}`}>
               {token.status === "graduated" ? (
                 <>
-                  <b>DEX live</b> — pool on DYOR. Snipers / BasedBot can buy via router.
+                  <b>Open market</b> — trading on Uniswap V3.
                 </>
               ) : (
                 <>
-                  <b>Bonding curve only</b> — not on DYOR yet. Bots that need a V2 pair will say
-                  “not tradeable”. Trade here on LPX until raise hits {fmtUsd(GRAD_TARGET)}, then LP
-                  locks on DYOR automatically.
+                  <b>Uni V3 pool live</b> — sniper / BasedBot ready from block 0.
+                  Fee tier <b>1%</b> · start mcap ~{fmtUsd(GRAD_TARGET)}. Trade here or via any V3
+                  router.
                 </>
               )}
             </div>
@@ -638,7 +639,7 @@ export default function TokenPage() {
                 <i style={{ width: `${Math.min(100, token.progress)}%` }} />
               </div>
               <div className="cap">
-                curve {fmtUsd(token.raised)} / {fmtUsd(GRAD_TARGET)} ·{" "}
+                curve {fmtUsd(token.mcap)} mcap · depth {fmtUsd(token.raised)} ·{" "}
                 {Math.min(100, token.progress).toFixed(2)}%
               </div>
             </div>
@@ -657,13 +658,13 @@ export default function TokenPage() {
               </div>
               {token.curve && (
                 <div className="ln">
-                  <span>bonding curve</span>
+                  <span>V3 pool</span>
                   <b className="mono row-actions">
                     <a href={explorerAddress(token.curve)} target="_blank" rel="noreferrer">
                       {shortAddr(token.curve, 6)}
                     </a>
-                    <button type="button" className="copy-btn" onClick={() => onCopy("curve", token.curve!)}>
-                      {copied === "curve" ? "copied" : "copy"}
+                    <button type="button" className="copy-btn" onClick={() => onCopy("pool", token.curve!)}>
+                      {copied === "pool" ? "copied" : "copy"}
                     </button>
                   </b>
                 </div>
@@ -679,7 +680,7 @@ export default function TokenPage() {
               </div>
               <div className="ln">
                 <span>market</span>
-                <b>{token.status === "graduated" ? "DYOR pair" : "LPX bonding curve"}</b>
+                <b>Uniswap V3 · fee 1%</b>
               </div>
               <div className="ln">
                 <span>socials</span>

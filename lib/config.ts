@@ -24,32 +24,37 @@ export const CREATOR_FEE_BPS = Math.round((TRADE_FEE_BPS * CREATOR_SHARE_BPS) / 
 /** @deprecated use TRADE_FEE_BPS * PLATFORM_SHARE_BPS / 10000 */
 export const PLATFORM_FEE_BPS = Math.round((TRADE_FEE_BPS * PLATFORM_SHARE_BPS) / 10_000); // 20 bps = 0.20%
 
-export const GRAD_TARGET = 20_000;
+/**
+ * StablePad-style: instant Uni V3 pool at create.
+ * "Graduation" is UI phase only — pool is tradeable from block 0.
+ * Start mcap ≈ $3k (see DEPLOYMENT.startMarketCapUsd).
+ */
+export const GRAD_TARGET = 3_000;
+export const START_MCAP_USD = 3_000;
+export const POOL_FEE = 10_000; // Uni V3 1%
 
 /**
- * Create cost model (Pons / pump-style):
+ * Create cost model (StablePad-style):
  * - No platform create fee
- * - User pays network gas only
+ * - User pays network gas only (~create token + V3 pool + mint LP)
  * - Optional first buy is separate capital, not a fee
  */
 export const CREATE_PLATFORM_FEE_USD = 0;
-/** rough Stable createPair gas envelope used by similar launchpads */
-export const CREATE_GAS_UNITS = 3_500_000;
-/** observed Stable base ~1 gwei; keep a small buffer for UI estimate */
+/** createToken + createPool + mint is heavier than curve-only */
+export const CREATE_GAS_UNITS = 5_500_000;
 export const CREATE_GAS_PRICE_GWEI = 1.2;
-/** Stable gas token is cheap; treat estimate in USD-ish for UI copy */
 export const CREATE_GAS_TOKEN_USD = 1;
 export const CREATE_GAS_EST_USD =
   (CREATE_GAS_UNITS * CREATE_GAS_PRICE_GWEI * 1e-9) * CREATE_GAS_TOKEN_USD;
 
 /**
- * Live factory on Stable mainnet (test wire).
- * Override with NEXT_PUBLIC_FACTORY when redeploying a new factory.
+ * Live StablePad-style factory on Stable mainnet.
+ * Override with NEXT_PUBLIC_FACTORY when redeploying.
  * Empty string forces demo mode.
  */
 export const FACTORY_ADDRESS =
   process.env.NEXT_PUBLIC_FACTORY ||
-  "0xd6C800f5582Ad2E34C21171286161D9E0F5CdC96";
+  "0xBecc3b11E6dE1c0cc2fBcb4827533Aa440a953C6";
 
 /** demo only when factory explicitly disabled */
 export const DEMO_MODE =
