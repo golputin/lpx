@@ -176,6 +176,70 @@ export async function loadLiveTokens(): Promise<LaunchToken[]> {
   return out;
 }
 
+export async function loadLiveToken(address: string): Promise<LaunchToken | null> {
+  if (!FACTORY_ADDRESS || !address) return null;
+  const token = address.toLowerCase();
+  try {
+    const curveRaw = await ethCall(FACTORY_ADDRESS, S.tokenToCurve + padAddr(token));
+    const curve = decodeAddress(curveRaw);
+    if (!curve || curve === "0x0000000000000000000000000000000000000000") {
+      // maybe not in this factory — try listing match
+      const all = await loadLiveTokens();
+      return all.find((t) => t.address.toLowerCase() === token) || null;
+    }
+    const [creatorRaw, nameRaw, symbolRaw, rqRaw, rtRaw, gradRaw, progRaw] = await Promise.all([
+      ethCall(FACTORY_ADDRESS, S.tokenCreator + padAddr(token)),
+      ethCall(token, S.name),
+      ethCall(token, S.symbol),
+      ethCall(curve, S.realQuoteReserves),
+      ethCall(curve, S.realTokenReserves),
+      ethCall(curve, S.graduated),
+      ethCall(curve, S.progressBps),
+    ]);
+    const creator = decodeAddress(creatorRaw);
+    const name = decodeString(nameRaw) || "Token";
+    const symbol = decodeString(symbolRaw) || "TKN";
+    const raised = asNum(decodeUint(rqRaw));
+    const left = asNum(decodeUint(rtRaw));
+    const graduated = decodeUint(gradRaw) === 1n;
+    const progressBps = Number(decodeUint(progRaw));
+    const progress =
+      progressBps > 0 ? progressBps / 100 : Math.min(100, (raised / GRAD_TARGET) * 100);
+    const sold = Math.max(0, 1_000_000_000 - left);
+    const price = sold > 0 ? raised / sold : raised > 0 ? raised / 150_000 : 0.00000002;
+    const mcap = price * 1_000_000_000;
+    return {
+      address: token,
+      name,
+      symbol,
+      creator,
+      curve,
+      createdAt: Math.floor(Date.now() / 1000),
+      raised,
+      mcap: Math.max(mcap, raised * 4),
+      vol24h: raised,
+      holders: raised > 0 ? 1 : 0,
+      progress,
+      status: graduated ? "graduated" : "live",
+      price,
+      change24h: 0,
+      description: `curve ${curve.slice(0, 10)}… · factory live`,
+      creatorFeesEarned: raised * 0.008,
+      creatorFeesClaimed: 0,
+      platformFeesEarned: raised * 0.002,
+      imageHue: 142,
+      imageUrl: placeholderImage(symbol + token, 142),
+      website: "",
+      twitter: "",
+      telegram: "",
+    };
+  } catch (e) {
+    console.warn("loadLiveToken", e);
+    const all = await loadLiveTokens().catch(() => [] as LaunchToken[]);
+    return all.find((t) => t.address.toLowerCase() === token) || null;
+  }
+}
+
 export function explorerAddress(addr: string) {
   return `${DEPLOYMENT.explorer}/address/${addr}`;
 }

@@ -82,7 +82,33 @@ body {
   font-size: 13px;
 }
 .menu button:hover { color: var(--text); background: #161616; }
-.menu button.on { color: var(--text); background: #1a1a1a; }
+.menu a.nav-link,
+a.nav-link {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  display: inline-block;
+}
+.menu a.nav-link:hover { color: var(--text); background: #161616; }
+.menu a.nav-link.on,
+span.nav-link.on {
+  color: var(--text);
+  background: #1a1a1a;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+}
+span.nav-link {
+  color: var(--muted);
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+}
 .right {
   display: flex;
   align-items: center;

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import {
   APP_NAME,
   CHAIN_ID,
@@ -144,7 +146,7 @@ function SocialLinks({
   );
 }
 
-export default function HomePage() {
+function HomePageInner() {
   const [tab, setTab] = useState<Tab>("explore");
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
@@ -176,6 +178,14 @@ export default function HomePage() {
   const [logoName, setLogoName] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const t = searchParams.get("tab");
+    if (t === "create" || t === "profile" || t === "explore") setTab(t);
+  }, [searchParams]);
+
 
   useEffect(() => {
     if (DEMO_MODE) {
@@ -420,9 +430,11 @@ export default function HomePage() {
   }
 
   function openToken(addr: string) {
-    setSelected(addr);
-    setTab("token");
+    if (!addr) return;
+    const a = addr.toLowerCase();
+    setSelected(a);
     setMsg(null);
+    router.push(`/token/${a}`);
   }
 
   function claimFees(addr?: string) {
@@ -751,7 +763,7 @@ export default function HomePage() {
           </button>
           <button
             className={tab === "token" ? "on" : ""}
-            onClick={() => (active ? setTab("token") : setTab("explore"))}
+            onClick={() => (active ? openToken(active.address) : setTab("explore"))}
           >
             token
           </button>
@@ -1141,7 +1153,7 @@ export default function HomePage() {
 
       {tab === "token" && (
         <section>
-          <button className="back" onClick={() => setTab("explore")}>
+          <button className="back" onClick={() => router.push("/")}>
             ← explore
           </button>
           {!active ? (
@@ -1627,4 +1639,13 @@ function chartPath(t: LaunchToken) {
     pts.push(`${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`);
   }
   return `${pts.join(" ")} L 640 240 L 0 240 Z`;
+}
+
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={<div className="app"><div className="empty">loading…</div></div>}>
+      <HomePageInner />
+    </Suspense>
+  );
 }
