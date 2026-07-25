@@ -1,32 +1,45 @@
-export const SITE_NAME = "LPX Arcade";
-export const GAME_NAME = "Paper Crash";
+export const APP_NAME = "LPX Pad";
+export const APP_TAGLINE = "Token launchpad on Stable";
 export const CHAIN_ID = 988;
 export const CHAIN_NAME = "Stable";
-export const EXPLORER = "https://stable.blockscout.com";
 export const RPC_URL = "https://rpc.stable.xyz";
+export const EXPLORER = "https://stable.blockscout.com";
+export const QUOTE_SYMBOL = "USDT0";
 
-/** Set after token launch. Empty / TBA = not live yet */
-export const CA_PLACEHOLDER =
-  process.env.NEXT_PUBLIC_TOKEN_CA || "TBA — deploy & paste CA here";
-export const TOKEN_SYMBOL = "LPX";
-export const TOKEN_NAME = "LPX";
+/** Platform cut of each buy/sell on the curve */
+export const PLATFORM_FEE_BPS = 100; // 1.00%
+/** Creator cut of each buy/sell on the curve */
+export const CREATOR_FEE_BPS = 100; // 1.00%
+/** Graduation target raise (quote) */
+export const GRAD_TARGET = 20_000;
 
-export const BUY_URL =
-  process.env.NEXT_PUBLIC_BUY_URL ||
-  (process.env.NEXT_PUBLIC_TOKEN_CA
-    ? `https://dyorswap.org/?chainId=988&token=${process.env.NEXT_PUBLIC_TOKEN_CA}`
-    : "https://dexscreener.com/stable");
+export const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY || "";
+export const DEMO_MODE = !FACTORY_ADDRESS;
 
-export const X_URL = process.env.NEXT_PUBLIC_X_URL || "https://x.com/";
-export const TG_URL = process.env.NEXT_PUBLIC_TG_URL || "https://t.me/";
-
-export const POINTS_KEY = "lpx_arcade_points_v1";
-export const LB_KEY = "lpx_arcade_lb_v1";
-export const START_POINTS = 1000;
-export const MAX_POINTS_BET = 500;
-
-export function short(a?: string | null, n = 4) {
-  if (!a || a.startsWith("TBA")) return "TBA";
-  if (a.length < 12) return a;
+export function shortAddr(a?: string | null, n = 4) {
+  if (!a) return "—";
   return `${a.slice(0, 2 + n)}…${a.slice(-n)}`;
+}
+
+export function fmt(n: number, d = 2) {
+  if (!Number.isFinite(n)) return "0";
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+  return n.toLocaleString(undefined, { maximumFractionDigits: d });
+}
+
+export function fmtUsd(n: number, d = 2) {
+  return `$${fmt(n, d)}`;
+}
+
+export function timeAgo(ts: number) {
+  const s = Math.max(0, Math.floor(Date.now() / 1000 - ts));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+
+export function bpsToPct(bps: number) {
+  return `${(bps / 100).toFixed(2)}%`;
 }

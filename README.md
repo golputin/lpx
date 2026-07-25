@@ -1,38 +1,42 @@
-# LPX Arcade
+# LPX Pad
 
-Free-to-play degen arcade for **Stable Network (988)**.
+Bonding-curve **token launchpad** for **Stable Network (chain 988)**.
 
-No deposit. No prize pool. No mystery-box bankroll.
+Inspired by the product shape of Quiver / Pons-style pads:
+- Explore trenches (live + graduated)
+- Create token with optional first buy
+- **Creator fee on every trade** + platform fee
+- Token page with curve progress + trade panel
 
-## What's live
+## Fee model (defaults)
 
-- **Paper Crash** — cash out before the multiplier dumps
-- **Leaderboard** — best cash-out multiplier (browser local for now)
-- **Token page** — clean TBA slot for `$LPX` when you launch
+| Fee | BPS | % |
+|---|---:|---:|
+| Creator | 100 | 1.00% |
+| Platform | 100 | 1.00% |
+| Graduation target | — | $20,000 USDT0 |
 
-## Why this model
+## Stack
 
-Same *retention idea* as Fefer Arcade (play free → flex score → token culture),
-but **not a Win98/dino clone**: neon crash terminal, one flagship game, ship fast, **$0 treasury**.
+- Next.js 14 (App Router) at repo root — Vercel-ready
+- Demo mode when `NEXT_PUBLIC_FACTORY` is empty (localStorage launches)
+- Optional Hardhat contracts remain under `onchain/` for later wiring
 
 ## Dev
 
 ```bash
 npm install
-npm run dev    # :3007
+npm run dev    # http://localhost:3007
 npm run build
 ```
 
-## Env (optional)
+## Env
 
 ```bash
-NEXT_PUBLIC_TOKEN_CA=0x...
-NEXT_PUBLIC_BUY_URL=https://...
-NEXT_PUBLIC_X_URL=https://x.com/...
-NEXT_PUBLIC_TG_URL=https://t.me/...
+NEXT_PUBLIC_FACTORY=0x...   # set after factory deploy to leave demo mode
 ```
 
-## On-chain contracts
+## Notes
 
-Hardhat / old StableBox contracts remain under `onchain/` for later if needed.
-They are **not** required for the arcade site.
+This release is a **production-shaped UI** with demo state.
+Wire factory / curve contracts next for real deploys on Stable.
