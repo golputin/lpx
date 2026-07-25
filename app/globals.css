@@ -140,7 +140,14 @@ body {
   letter-spacing: 0.02em;
   min-width: 120px;
 }
-.logo img { width: 22px; height: 22px; }
+.logo img {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  object-fit: cover;
+  border: 1px solid #1f1f1f;
+  background: #0a0a0a;
+}
 .logo-text {
   display: flex;
   flex-direction: column;

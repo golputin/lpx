@@ -421,7 +421,7 @@ export default function TokenPage() {
       <header className="top">
         <Link href="/" className="logo">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="" />
+          <img src="/logo.webp" alt="FEFER LAUNCHPAD" />
           <div className="logo-text">
             <b>{APP_NAME}</b>
             <span>{APP_TAGLINE}</span>

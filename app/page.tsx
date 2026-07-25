@@ -809,7 +809,7 @@ function HomePageInner() {
       </div>
       <header className="top">
         <div className="logo">
-          <img src="/logo.svg" alt="" />
+          <img src="/logo.webp" alt="FEFER LAUNCHPAD" />
           <div className="logo-text">
             <b>{APP_NAME}</b>
             <span>{APP_TAGLINE}</span>

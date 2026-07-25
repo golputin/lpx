@@ -5,17 +5,25 @@ import { APP_FULL_NAME, APP_NAME, APP_TAGLINE, TWITTER_HANDLE } from "@/lib/conf
 export const metadata: Metadata = {
   title: `${APP_FULL_NAME} — Stable`,
   description: `${APP_FULL_NAME} on Stable. Launch & trade with Uni V3 pools. 1% fee. @${TWITTER_HANDLE}`,
-  icons: { icon: "/logo.svg" },
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/logo-64.png", sizes: "64x64", type: "image/png" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
   openGraph: {
     title: APP_FULL_NAME,
     description: `Launch tokens on Stable · @${TWITTER_HANDLE}`,
-    images: ["/logo.svg"],
+    images: [{ url: "/og.jpg", width: 1024, height: 1024, alt: APP_FULL_NAME }],
   },
   twitter: {
     card: "summary",
     title: APP_FULL_NAME,
     description: `${APP_NAME} ${APP_TAGLINE}`,
     creator: `@${TWITTER_HANDLE}`,
+    images: ["/og.jpg"],
   },
 };
 
