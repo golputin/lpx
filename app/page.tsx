@@ -9,6 +9,7 @@ import {
   CREATE_PLATFORM_FEE_USD,
   CREATOR_SHARE_BPS,
   DEMO_MODE,
+  FACTORY_ADDRESS,
   GRAD_TARGET,
   PLATFORM_SHARE_BPS,
   QUOTE_SYMBOL,
@@ -33,6 +34,8 @@ import {
   createDemoToken,
   placeholderImage,
 } from "@/lib/demo";
+import { DEPLOYMENT } from "@/lib/deployment";
+import { explorerAddress, loadLiveTokens } from "@/lib/onchain";
 
 type Tab = "explore" | "create" | "token" | "profile";
 type Filter = "all" | "live" | "graduated" | "newest" | "mcap" | "volume";
@@ -44,13 +47,18 @@ const ACT_KEY = "lpx_pad_activity_v4";
 const MAX_LOGO_BYTES = 1_200_000; // ~1.2MB before base64
 
 function loadTokens(): LaunchToken[] {
-  if (typeof window === "undefined") return DEMO_TOKENS;
+  if (typeof window === "undefined") return DEMO_MODE ? DEMO_TOKENS : [];
   try {
     const raw = localStorage.getItem(STORE_KEY) || localStorage.getItem("lpx_pad_tokens_v3");
-    if (!raw) return DEMO_TOKENS;
+    if (!raw) return DEMO_MODE ? DEMO_TOKENS : [];
     const parsed = JSON.parse(raw) as LaunchToken[];
-    if (!parsed.length) return DEMO_TOKENS;
-    return parsed.map((t) => ({
+    if (!parsed.length) return DEMO_MODE ? DEMO_TOKENS : [];
+    // live mode: ignore pure demo seed rows
+    const cleaned = DEMO_MODE
+      ? parsed
+      : parsed.filter((t) => t.address && !t.address.startsWith("0x000000"));
+    if (!cleaned.length) return DEMO_MODE ? DEMO_TOKENS : [];
+    return cleaned.map((t) => ({
       ...t,
       creatorFeesClaimed: t.creatorFeesClaimed || 0,
       imageUrl: t.imageUrl || placeholderImage(t.symbol + t.address, t.imageHue || 160),
@@ -59,18 +67,18 @@ function loadTokens(): LaunchToken[] {
       telegram: t.telegram || "",
     }));
   } catch {
-    return DEMO_TOKENS;
+    return DEMO_MODE ? DEMO_TOKENS : [];
   }
 }
 
 function loadActivity(): Activity[] {
-  if (typeof window === "undefined") return DEMO_ACTIVITY;
+  if (typeof window === "undefined") return DEMO_MODE ? DEMO_ACTIVITY : [];
   try {
     const raw = localStorage.getItem(ACT_KEY) || localStorage.getItem("lpx_pad_activity_v3");
-    if (!raw) return DEMO_ACTIVITY;
+    if (!raw) return DEMO_MODE ? DEMO_ACTIVITY : [];
     return JSON.parse(raw) as Activity[];
   } catch {
-    return DEMO_ACTIVITY;
+    return DEMO_MODE ? DEMO_ACTIVITY : [];
   }
 }
 
@@ -127,14 +135,15 @@ export default function HomePage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [q, setQ] = useState("");
   const [wallet, setWallet] = useState<string | null>(null);
-  const [tokens, setTokens] = useState<LaunchToken[]>(DEMO_TOKENS);
-  const [activity, setActivity] = useState<Activity[]>(DEMO_ACTIVITY);
+  const [tokens, setTokens] = useState<LaunchToken[]>(DEMO_MODE ? DEMO_TOKENS : []);
+  const [activity, setActivity] = useState<Activity[]>(DEMO_MODE ? DEMO_ACTIVITY : []);
   const [selected, setSelected] = useState<string | null>(null);
   const [side, setSide] = useState<Side>("buy");
   const [tradeAmt, setTradeAmt] = useState("100");
   const [msg, setMsg] = useState<string | null>(null);
   const [profilePane, setProfilePane] = useState<ProfilePane>("launches");
   const [claimBusy, setClaimBusy] = useState<string | null>(null);
+  const [chainLoading, setChainLoading] = useState(!DEMO_MODE);
 
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
@@ -149,16 +158,70 @@ export default function HomePage() {
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    setTokens(loadTokens());
-    setActivity(loadActivity());
+    if (DEMO_MODE) {
+      setTokens(loadTokens());
+      setActivity(loadActivity());
+      setChainLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setChainLoading(true);
+      try {
+        const live = await loadLiveTokens();
+        if (cancelled) return;
+        if (live.length) {
+          setTokens(live);
+          setActivity([
+            {
+              id: `launch-${live[0].address}`,
+              kind: "launch",
+              token: live[0].address,
+              symbol: live[0].symbol,
+              trader: live[0].creator,
+              amountUsd: live[0].raised,
+              ts: live[0].createdAt,
+            },
+            ...(live[0].raised > 0
+              ? [
+                  {
+                    id: `buy-${live[0].address}`,
+                    kind: "buy" as const,
+                    token: live[0].address,
+                    symbol: live[0].symbol,
+                    trader: live[0].creator,
+                    amountUsd: live[0].raised,
+                    ts: live[0].createdAt + 1,
+                  },
+                ]
+              : []),
+          ]);
+          setMsg(`live · factory ${shortAddr(FACTORY_ADDRESS, 4)} · ${live.length} token`);
+        } else {
+          setTokens([]);
+          setActivity([]);
+          setMsg("factory wired · no tokens yet");
+        }
+      } catch (e) {
+        console.warn(e);
+        if (!cancelled) setMsg("rpc read failed — factory still wired");
+      } finally {
+        if (!cancelled) setChainLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORE_KEY, JSON.stringify(tokens));
+    if (DEMO_MODE) localStorage.setItem(STORE_KEY, JSON.stringify(tokens));
   }, [tokens]);
 
   useEffect(() => {
-    localStorage.setItem(ACT_KEY, JSON.stringify(activity));
+    if (DEMO_MODE) localStorage.setItem(ACT_KEY, JSON.stringify(activity));
   }, [activity]);
 
   const stats = useMemo(() => {
@@ -305,6 +368,13 @@ export default function HomePage() {
       setMsg("name + symbol required");
       return;
     }
+    if (!DEMO_MODE) {
+      setMsg(
+        `factory live ${shortAddr(FACTORY_ADDRESS, 4)} — browser wallet create coming next. test token: ${DEPLOYMENT.test.symbol}`
+      );
+      if (DEPLOYMENT.test?.token) openToken(DEPLOYMENT.test.token.toLowerCase());
+      return;
+    }
     setBusy(true);
     setTimeout(() => {
       const t = createDemoToken({
@@ -437,7 +507,20 @@ export default function HomePage() {
           <span className="pill">
             <b>●</b> {CHAIN_NAME}
           </span>
-          {DEMO_MODE && <span className="pill">demo</span>}
+          {DEMO_MODE ? (
+            <span className="pill">demo</span>
+          ) : (
+            <a
+              className="pill"
+              href={explorerAddress(FACTORY_ADDRESS)}
+              target="_blank"
+              rel="noreferrer"
+              title={FACTORY_ADDRESS}
+            >
+              live · {shortAddr(FACTORY_ADDRESS, 3)}
+            </a>
+          )}
+          {chainLoading && <span className="pill">sync…</span>}
           {feeStats.claimable > 0 && wallet && (
             <button className="pill claim-pill" onClick={() => claimFees()}>
               claim {fmtUsd(feeStats.claimable)}

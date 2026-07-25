@@ -42,8 +42,21 @@ export const CREATE_GAS_TOKEN_USD = 1;
 export const CREATE_GAS_EST_USD =
   (CREATE_GAS_UNITS * CREATE_GAS_PRICE_GWEI * 1e-9) * CREATE_GAS_TOKEN_USD;
 
-export const FACTORY_ADDRESS = process.env.NEXT_PUBLIC_FACTORY || "";
-export const DEMO_MODE = !FACTORY_ADDRESS;
+/**
+ * Live factory on Stable mainnet (test wire).
+ * Override with NEXT_PUBLIC_FACTORY when redeploying a new factory.
+ * Empty string forces demo mode.
+ */
+export const FACTORY_ADDRESS =
+  process.env.NEXT_PUBLIC_FACTORY ||
+  "0xd6C800f5582Ad2E34C21171286161D9E0F5CdC96";
+
+/** demo only when factory explicitly disabled */
+export const DEMO_MODE =
+  process.env.NEXT_PUBLIC_DEMO === "1" ||
+  !FACTORY_ADDRESS ||
+  FACTORY_ADDRESS === "0x" ||
+  FACTORY_ADDRESS.toLowerCase() === "demo";
 
 export function shortAddr(a?: string | null, n = 4) {
   if (!a) return "—";

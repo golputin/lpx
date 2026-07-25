@@ -1,0 +1,23 @@
+{
+  "network": "stable",
+  "chainId": 988,
+  "factory": "0xd6C800f5582Ad2E34C21171286161D9E0F5CdC96",
+  "deployer": "0xf34A31374BCEB04E3479EaC8a53eB6E600CAA89f",
+  "deployTx": "0xdbc9edc84127fa760a660acdae334d0f817ddc984023bb6d02947047be91ddc4",
+  "testToken": {
+    "name": "TEST Token",
+    "symbol": "TEST",
+    "token": "0xcad717573953283e5BFcA1fC1b89B7A7a4C60d8a",
+    "curve": "0x6f3F6f084DCA2aB19e7D86eA2d0E07d59745d791",
+    "createTx": "0x3b66822361f95607c84eba67f0784ac03e180909be71ea0c9712a007061faac0",
+    "firstBuyNative": "1.0",
+    "raisedAfterFee": "0.99",
+    "tokensReceived": "151731.397987998840164033"
+  },
+  "params": {
+    "graduationTarget": "20000",
+    "feeBps": 100,
+    "creationFee": 0
+  },
+  "note": "Test wire only — redeploy factory later and set NEXT_PUBLIC_FACTORY"
+}

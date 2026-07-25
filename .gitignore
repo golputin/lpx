@@ -8,9 +8,12 @@ onchain/typechain/
 onchain/typechain-types/
 onchain/deployments/*.json
 .env
-.env.*
+.env.local
+.env.*.local
+!.env.example
 !.env.example
 .next/
+deployments/*.secret.json
 out/
 *.log
 .DS_Store
