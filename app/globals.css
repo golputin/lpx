@@ -546,3 +546,38 @@ table.tokens tr:last-child td { border-bottom: 0; }
 
 /* mobile table -> cards fallback not needed; allow horizontal scroll */
 .scrollx { overflow-x: auto; }
+
+.claim-pill {
+  border-color: rgba(0, 200, 83, 0.45) !important;
+  color: var(--green2) !important;
+  cursor: pointer;
+}
+.claim-pill:hover { background: rgba(0, 200, 83, 0.08); }
+
+.profile-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.profile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.profile-feed { max-height: none; }
+.profile-feed .row { cursor: pointer; }
+.profile-feed .row:hover { background: #161616; }
+
+.fee-list { display: grid; gap: 8px; }
+.fee-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0e0e0e;
+}
+.fee-row .tok { cursor: pointer; min-width: 0; }
+@media (max-width: 700px) {
+  .profile-head { flex-direction: column; }
+}

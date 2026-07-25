@@ -27,28 +27,32 @@ import {
   Activity,
   DEMO_ACTIVITY,
   DEMO_TOKENS,
+  DEMO_WALLET,
   LaunchToken,
+  claimableFees,
   createDemoToken,
   placeholderImage,
 } from "@/lib/demo";
 
-type Tab = "explore" | "create" | "token";
+type Tab = "explore" | "create" | "token" | "profile";
 type Filter = "all" | "live" | "graduated" | "newest" | "mcap" | "volume";
 type Side = "buy" | "sell";
+type ProfilePane = "launches" | "activity" | "fees";
 
-const STORE_KEY = "lpx_pad_tokens_v3";
-const ACT_KEY = "lpx_pad_activity_v3";
+const STORE_KEY = "lpx_pad_tokens_v4";
+const ACT_KEY = "lpx_pad_activity_v4";
 const MAX_LOGO_BYTES = 1_200_000; // ~1.2MB before base64
 
 function loadTokens(): LaunchToken[] {
   if (typeof window === "undefined") return DEMO_TOKENS;
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = localStorage.getItem(STORE_KEY) || localStorage.getItem("lpx_pad_tokens_v3");
     if (!raw) return DEMO_TOKENS;
     const parsed = JSON.parse(raw) as LaunchToken[];
     if (!parsed.length) return DEMO_TOKENS;
     return parsed.map((t) => ({
       ...t,
+      creatorFeesClaimed: t.creatorFeesClaimed || 0,
       imageUrl: t.imageUrl || placeholderImage(t.symbol + t.address, t.imageHue || 160),
       website: t.website || "",
       twitter: t.twitter || "",
@@ -62,7 +66,7 @@ function loadTokens(): LaunchToken[] {
 function loadActivity(): Activity[] {
   if (typeof window === "undefined") return DEMO_ACTIVITY;
   try {
-    const raw = localStorage.getItem(ACT_KEY);
+    const raw = localStorage.getItem(ACT_KEY) || localStorage.getItem("lpx_pad_activity_v3");
     if (!raw) return DEMO_ACTIVITY;
     return JSON.parse(raw) as Activity[];
   } catch {
@@ -96,7 +100,11 @@ function TokenAvatar({
   );
 }
 
-function SocialLinks({ token }: { token: LaunchToken }) {
+function SocialLinks({
+  token,
+}: {
+  token: Pick<LaunchToken, "website" | "twitter" | "telegram">;
+}) {
   const items = [
     { href: normalizeUrl(token.website), label: "web" },
     { href: normalizeUrl(token.twitter), label: "x" },
@@ -125,6 +133,8 @@ export default function HomePage() {
   const [side, setSide] = useState<Side>("buy");
   const [tradeAmt, setTradeAmt] = useState("100");
   const [msg, setMsg] = useState<string | null>(null);
+  const [profilePane, setProfilePane] = useState<ProfilePane>("launches");
+  const [claimBusy, setClaimBusy] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
@@ -188,15 +198,79 @@ export default function HomePage() {
 
   const createCost = useMemo(() => createCostBreakdown(Number(firstBuy) || 0), [firstBuy]);
 
+  const me = (wallet || "").toLowerCase();
+
+  const myLaunches = useMemo(() => {
+    if (!me) return [] as LaunchToken[];
+    return tokens
+      .filter((t) => t.creator.toLowerCase() === me)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [tokens, me]);
+
+  const myActivity = useMemo(() => {
+    if (!me) return [] as Activity[];
+    return activity
+      .filter((a) => a.trader.toLowerCase() === me)
+      .sort((a, b) => b.ts - a.ts);
+  }, [activity, me]);
+
+  const feeStats = useMemo(() => {
+    const earned = myLaunches.reduce((s, t) => s + (t.creatorFeesEarned || 0), 0);
+    const claimed = myLaunches.reduce((s, t) => s + (t.creatorFeesClaimed || 0), 0);
+    const claimable = myLaunches.reduce((s, t) => s + claimableFees(t), 0);
+    return { earned, claimed, claimable, count: myLaunches.length };
+  }, [myLaunches]);
+
   function connect() {
-    setWallet("0x1b04beb50c40df7e5efdbf91c5d876e94666603d");
+    setWallet(DEMO_WALLET);
     setMsg("connected (demo)");
+  }
+
+  function openProfile() {
+    if (!wallet) connect();
+    setTab("profile");
+    setMsg(null);
   }
 
   function openToken(addr: string) {
     setSelected(addr);
     setTab("token");
     setMsg(null);
+  }
+
+  function claimFees(addr?: string) {
+    if (!wallet) {
+      setMsg("connect wallet first");
+      return;
+    }
+    const targets = addr
+      ? tokens.filter((t) => t.address === addr)
+      : tokens.filter((t) => t.creator.toLowerCase() === me && claimableFees(t) > 0);
+    if (!targets.length) {
+      setMsg("nothing to claim");
+      return;
+    }
+    const total = targets.reduce((s, t) => s + claimableFees(t), 0);
+    if (total <= 0) {
+      setMsg("nothing to claim");
+      return;
+    }
+    setClaimBusy(addr || "all");
+    setTimeout(() => {
+      setTokens((prev) =>
+        prev.map((t) => {
+          if (t.creator.toLowerCase() !== me) return t;
+          if (addr && t.address !== addr) return t;
+          const due = claimableFees(t);
+          if (due <= 0) return t;
+          return { ...t, creatorFeesClaimed: (t.creatorFeesClaimed || 0) + due };
+        })
+      );
+      setClaimBusy(null);
+      setMsg(`claimed ${fmtUsd(total)} creator fees → ${shortAddr(wallet, 3)}`);
+      setProfilePane("fees");
+      setTab("profile");
+    }, 420);
   }
 
   function onLogoPick(file?: File | null) {
@@ -237,7 +311,7 @@ export default function HomePage() {
         name: name.trim(),
         symbol: symbol.trim(),
         description: desc.trim(),
-        creator: wallet || "0xcafe00000000000000000000000000000000cafe",
+        creator: wallet || DEMO_WALLET,
         firstBuy: Number(firstBuy) || 0,
         imageUrl: logoData || undefined,
         website: normalizeUrl(website),
@@ -309,6 +383,7 @@ export default function HomePage() {
           price: Math.max(0.0000001, t.price * (side === "buy" ? 1.02 : 0.985)),
           change24h: t.change24h + (side === "buy" ? 1.2 : -0.9),
           creatorFeesEarned: t.creatorFeesEarned + split.creator,
+          creatorFeesClaimed: t.creatorFeesClaimed || 0,
           platformFeesEarned: t.platformFeesEarned + split.platform,
           status: raised >= GRAD_TARGET ? "graduated" : t.status,
         };
@@ -354,12 +429,23 @@ export default function HomePage() {
           >
             token
           </button>
+          <button className={tab === "profile" ? "on" : ""} onClick={openProfile}>
+            profile
+          </button>
         </nav>
         <div className="right">
           <span className="pill">
             <b>●</b> {CHAIN_NAME}
           </span>
           {DEMO_MODE && <span className="pill">demo</span>}
+          {feeStats.claimable > 0 && wallet && (
+            <button className="pill claim-pill" onClick={() => claimFees()}>
+              claim {fmtUsd(feeStats.claimable)}
+            </button>
+          )}
+          <button className="btn" onClick={openProfile}>
+            {wallet ? "profile" : "profile"}
+          </button>
           <button className="btn green" onClick={connect}>
             {wallet ? shortAddr(wallet, 3) : "connect"}
           </button>
@@ -651,30 +737,7 @@ export default function HomePage() {
               <div>
                 <div className="n">{name || "Token name"}</div>
                 <div className="m mono">${(symbol || "TICKER").toUpperCase()}</div>
-                <SocialLinks
-                  token={{
-                    address: "x",
-                    name: "",
-                    symbol: "",
-                    creator: "",
-                    createdAt: 0,
-                    raised: 0,
-                    mcap: 0,
-                    vol24h: 0,
-                    holders: 0,
-                    progress: 0,
-                    status: "live",
-                    price: 0,
-                    change24h: 0,
-                    description: "",
-                    creatorFeesEarned: 0,
-                    platformFeesEarned: 0,
-                    imageHue: 0,
-                    website,
-                    twitter,
-                    telegram,
-                  }}
-                />
+                <SocialLinks token={{ website, twitter, telegram }} />
               </div>
             </div>
 
@@ -833,10 +896,24 @@ export default function HomePage() {
                     <b className="up">{fmtUsd(active.creatorFeesEarned)}</b>
                   </div>
                   <div className="ln">
+                    <span>claimable</span>
+                    <b className="up">{fmtUsd(claimableFees(active))}</b>
+                  </div>
+                  <div className="ln">
                     <span>creator wallet</span>
                     <b className="mono">{shortAddr(active.creator, 4)}</b>
                   </div>
                 </div>
+                {wallet && active.creator.toLowerCase() === me && claimableFees(active) > 0 && (
+                  <button
+                    className="btn green block"
+                    style={{ marginTop: 8 }}
+                    disabled={claimBusy === active.address || claimBusy === "all"}
+                    onClick={() => claimFees(active.address)}
+                  >
+                    {claimBusy === active.address ? "claiming…" : `claim ${fmtUsd(claimableFees(active))}`}
+                  </button>
+                )}
                 <button
                   className={`btn lg block ${side === "buy" ? "green" : "red"}`}
                   style={{ marginTop: 12 }}
@@ -847,6 +924,274 @@ export default function HomePage() {
                 {msg && <div className="note">{msg}</div>}
               </div>
             </div>
+          )}
+        </section>
+      )}
+
+      {tab === "profile" && (
+        <section className="profile">
+          {!wallet ? (
+            <div className="card">
+              <h2>profile</h2>
+              <p className="sub">connect wallet to see launches, activity, and claimable fees</p>
+              <button className="btn green" onClick={connect}>
+                connect
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="card profile-head">
+                <div>
+                  <h2>profile</h2>
+                  <div className="meta mono">{wallet}</div>
+                  <p className="sub" style={{ marginBottom: 0 }}>
+                    creator share {shareToPct(CREATOR_SHARE_BPS)} of {bpsToPct(TRADE_FEE_BPS)} trade fee · claim
+                    anytime
+                  </p>
+                </div>
+                <div className="profile-actions">
+                  <button
+                    className="btn green"
+                    disabled={feeStats.claimable <= 0 || claimBusy !== null}
+                    onClick={() => claimFees()}
+                  >
+                    {claimBusy === "all"
+                      ? "claiming…"
+                      : feeStats.claimable > 0
+                        ? `claim all ${fmtUsd(feeStats.claimable)}`
+                        : "nothing to claim"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="strip">
+                <div className="s">
+                  <div className="l">launches</div>
+                  <div className="v">{feeStats.count}</div>
+                </div>
+                <div className="s">
+                  <div className="l">activity</div>
+                  <div className="v">{myActivity.length}</div>
+                </div>
+                <div className="s">
+                  <div className="l">fees earned</div>
+                  <div className="v up">{fmtUsd(feeStats.earned)}</div>
+                </div>
+                <div className="s">
+                  <div className="l">claimed</div>
+                  <div className="v">{fmtUsd(feeStats.claimed)}</div>
+                </div>
+                <div className="s">
+                  <div className="l">claimable</div>
+                  <div className="v up">{fmtUsd(feeStats.claimable)}</div>
+                </div>
+              </div>
+
+              <div className="bar">
+                <div className="filters">
+                  {(
+                    [
+                      ["launches", "launches"],
+                      ["activity", "activity"],
+                      ["fees", "fees"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      className={profilePane === id ? "on" : ""}
+                      onClick={() => setProfilePane(id)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button className="btn green" onClick={() => setTab("create")}>
+                  + create
+                </button>
+              </div>
+
+              {profilePane === "launches" && (
+                <div className="table-wrap scrollx">
+                  <table className="tokens">
+                    <thead>
+                      <tr>
+                        <th>token</th>
+                        <th>status</th>
+                        <th>mcap</th>
+                        <th>vol</th>
+                        <th>curve</th>
+                        <th>earned</th>
+                        <th>claimable</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {myLaunches.map((t) => {
+                        const due = claimableFees(t);
+                        return (
+                          <tr key={t.address}>
+                            <td onClick={() => openToken(t.address)}>
+                              <div className="tok">
+                                <TokenAvatar token={t} />
+                                <div>
+                                  <div className="n">{t.name}</div>
+                                  <div className="m">
+                                    ${t.symbol} · {shortAddr(t.address, 3)}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <span className={`tag ${t.status === "graduated" ? "grad" : "live"}`}>
+                                {t.status === "graduated" ? "grad" : "live"}
+                              </span>
+                            </td>
+                            <td>{fmtUsd(t.mcap)}</td>
+                            <td>{fmtUsd(t.vol24h)}</td>
+                            <td>
+                              <div className="prog">
+                                <div className="track">
+                                  <i style={{ width: `${Math.min(100, t.progress)}%` }} />
+                                </div>
+                                <div className="cap">
+                                  {fmtUsd(t.raised)}/{fmtUsd(GRAD_TARGET)}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="up">{fmtUsd(t.creatorFeesEarned)}</td>
+                            <td className="up">{fmtUsd(due)}</td>
+                            <td>
+                              <button
+                                className="btn green"
+                                disabled={due <= 0 || claimBusy !== null}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  claimFees(t.address);
+                                }}
+                              >
+                                {claimBusy === t.address ? "…" : due > 0 ? "claim" : "—"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {myLaunches.length === 0 && (
+                        <tr>
+                          <td colSpan={8}>
+                            <div className="empty">
+                              no launches yet ·{" "}
+                              <button className="btn green" onClick={() => setTab("create")}>
+                                create one
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {profilePane === "activity" && (
+                <div className="card">
+                  <h2>your activity</h2>
+                  <p className="sub">buys, sells, launches tied to this wallet</p>
+                  <div className="feed profile-feed">
+                    {myActivity.map((a) => {
+                      const tok = tokens.find((t) => t.address === a.token);
+                      return (
+                        <div className="row" key={a.id} onClick={() => openToken(a.token)}>
+                          <div className={`k ${a.kind}`}>{a.kind}</div>
+                          <div className="act-main">
+                            {tok && <TokenAvatar token={tok} size={22} className="av sm" />}
+                            <div>
+                              <div>
+                                <b>${a.symbol}</b>{" "}
+                                <span className="dim mono">{shortAddr(a.token, 3)}</span>
+                              </div>
+                              <div className="dim">{timeAgo(a.ts)}</div>
+                            </div>
+                          </div>
+                          <div className={a.kind === "sell" ? "dn" : "up"}>
+                            {a.amountUsd > 0 ? fmtUsd(a.amountUsd) : "—"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {myActivity.length === 0 && <div className="empty">no activity for this wallet</div>}
+                  </div>
+                </div>
+              )}
+
+              {profilePane === "fees" && (
+                <div className="grid2">
+                  <div className="card">
+                    <h2>claimable fees</h2>
+                    <p className="sub">
+                      80% of every 1% trade fee accrues to you as creator. Claim pulls unclaimed balance.
+                    </p>
+                    <div className="lines">
+                      <div className="ln">
+                        <span>lifetime earned</span>
+                        <b className="up">{fmtUsd(feeStats.earned)}</b>
+                      </div>
+                      <div className="ln">
+                        <span>already claimed</span>
+                        <b>{fmtUsd(feeStats.claimed)}</b>
+                      </div>
+                      <div className="ln">
+                        <span>available now</span>
+                        <b className="up">{fmtUsd(feeStats.claimable)}</b>
+                      </div>
+                    </div>
+                    <button
+                      className="btn green lg block"
+                      style={{ marginTop: 12 }}
+                      disabled={feeStats.claimable <= 0 || claimBusy !== null}
+                      onClick={() => claimFees()}
+                    >
+                      {claimBusy === "all"
+                        ? "claiming…"
+                        : feeStats.claimable > 0
+                          ? `claim all ${fmtUsd(feeStats.claimable)} ${QUOTE_SYMBOL}`
+                          : "no claimable fees"}
+                    </button>
+                    {msg && <div className="note">{msg}</div>}
+                  </div>
+
+                  <div className="card">
+                    <h2>per token</h2>
+                    <div className="fee-list">
+                      {myLaunches.map((t) => {
+                        const due = claimableFees(t);
+                        return (
+                          <div className="fee-row" key={t.address}>
+                            <div className="tok" onClick={() => openToken(t.address)}>
+                              <TokenAvatar token={t} size={28} />
+                              <div>
+                                <div className="n">${t.symbol}</div>
+                                <div className="m">
+                                  earned {fmtUsd(t.creatorFeesEarned)} · claimed{" "}
+                                  {fmtUsd(t.creatorFeesClaimed || 0)}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              className="btn green"
+                              disabled={due <= 0 || claimBusy !== null}
+                              onClick={() => claimFees(t.address)}
+                            >
+                              {claimBusy === t.address ? "…" : due > 0 ? fmtUsd(due) : "—"}
+                            </button>
+                          </div>
+                        );
+                      })}
+                      {myLaunches.length === 0 && <div className="empty">launch a token to earn fees</div>}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}

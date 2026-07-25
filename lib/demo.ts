@@ -7,6 +7,9 @@ import {
 
 export type TokenStatus = "live" | "graduated";
 
+/** demo connect wallet — also used so profile has sample launches */
+export const DEMO_WALLET = "0x1b04beb50c40df7e5efdbf91c5d876e94666603d";
+
 export type LaunchToken = {
   address: string;
   name: string;
@@ -22,7 +25,10 @@ export type LaunchToken = {
   price: number;
   change24h: number;
   description: string;
+  /** lifetime creator fee accrued from trades */
   creatorFeesEarned: number;
+  /** already claimed by creator */
+  creatorFeesClaimed: number;
   platformFeesEarned: number;
   imageHue: number;
   /** data URL or remote image */
@@ -31,6 +37,10 @@ export type LaunchToken = {
   twitter?: string;
   telegram?: string;
 };
+
+export function claimableFees(t: LaunchToken) {
+  return Math.max(0, (t.creatorFeesEarned || 0) - (t.creatorFeesClaimed || 0));
+}
 
 export type Activity = {
   id: string;
@@ -65,16 +75,22 @@ export function placeholderImage(seed: string, hue = 160) {
 }
 
 function tok(
-  partial: Omit<LaunchToken, "creatorFeesEarned" | "platformFeesEarned" | "imageUrl"> & {
+  partial: Omit<
+    LaunchToken,
+    "creatorFeesEarned" | "creatorFeesClaimed" | "platformFeesEarned" | "imageUrl"
+  > & {
     volForFees: number;
     imageUrl?: string;
+    claimedRatio?: number;
   }
 ): LaunchToken {
   const f = feesFromVol(partial.volForFees);
-  const { volForFees: _v, ...rest } = partial;
+  const claimedRatio = Math.min(1, Math.max(0, partial.claimedRatio ?? 0));
+  const { volForFees: _v, claimedRatio: _c, ...rest } = partial;
   return {
     ...rest,
     creatorFeesEarned: f.creator,
+    creatorFeesClaimed: f.creator * claimedRatio,
     platformFeesEarned: f.platform,
     imageUrl: partial.imageUrl || placeholderImage(partial.symbol + partial.address, partial.imageHue),
   };
@@ -85,7 +101,7 @@ export const DEMO_TOKENS: LaunchToken[] = [
     address: addr(0x1111),
     name: "Stable Signal",
     symbol: "SIG",
-    creator: addr(0xaaa1),
+    creator: DEMO_WALLET,
     createdAt: now() - 420,
     raised: 1840,
     mcap: 9200,
@@ -101,12 +117,13 @@ export const DEMO_TOKENS: LaunchToken[] = [
     twitter: "https://x.com/stable",
     telegram: "https://t.me/stable",
     volForFees: 12600,
+    claimedRatio: 0.25,
   }),
   tok({
     address: addr(0x2222),
     name: "Vault Cat",
     symbol: "VCAT",
-    creator: addr(0xaaa2),
+    creator: DEMO_WALLET,
     createdAt: now() - 3600,
     raised: 9200,
     mcap: 41000,
@@ -120,6 +137,7 @@ export const DEMO_TOKENS: LaunchToken[] = [
     imageHue: 280,
     twitter: "https://x.com/vaultcat",
     volForFees: 33400,
+    claimedRatio: 0.1,
   }),
   tok({
     address: addr(0x3333),
@@ -164,7 +182,7 @@ export const DEMO_TOKENS: LaunchToken[] = [
     address: addr(0x5555),
     name: "Quiet Protocol",
     symbol: "QUIET",
-    creator: addr(0xaaa5),
+    creator: DEMO_WALLET,
     createdAt: now() - 1400,
     raised: 3100,
     mcap: 15500,
@@ -178,6 +196,7 @@ export const DEMO_TOKENS: LaunchToken[] = [
     imageHue: 200,
     telegram: "https://t.me/quiet",
     volForFees: 9800,
+    claimedRatio: 0,
   }),
   tok({
     address: addr(0x6666),
@@ -241,11 +260,14 @@ export const DEMO_ACTIVITY: Activity[] = [
   { id: "1", kind: "buy", token: addr(0x1111), symbol: "SIG", trader: addr(0xb001), amountUsd: 120, ts: now() - 40 },
   { id: "2", kind: "sell", token: addr(0x2222), symbol: "VCAT", trader: addr(0xb002), amountUsd: 85, ts: now() - 90 },
   { id: "3", kind: "launch", token: addr(0x8888), symbol: "DUST", trader: addr(0xaaa8), amountUsd: 0, ts: now() - 900 },
-  { id: "4", kind: "buy", token: addr(0x5555), symbol: "QUIET", trader: addr(0xb003), amountUsd: 250, ts: now() - 200 },
+  { id: "4", kind: "buy", token: addr(0x5555), symbol: "QUIET", trader: DEMO_WALLET, amountUsd: 250, ts: now() - 200 },
   { id: "5", kind: "graduate", token: addr(0x4444), symbol: "NSTR", trader: addr(0xaaa4), amountUsd: GRAD_TARGET, ts: now() - 80000 },
   { id: "6", kind: "buy", token: addr(0x6666), symbol: "LEAF", trader: addr(0xb004), amountUsd: 64, ts: now() - 300 },
-  { id: "7", kind: "sell", token: addr(0x1111), symbol: "SIG", trader: addr(0xb005), amountUsd: 40, ts: now() - 500 },
+  { id: "7", kind: "sell", token: addr(0x1111), symbol: "SIG", trader: DEMO_WALLET, amountUsd: 40, ts: now() - 500 },
   { id: "8", kind: "buy", token: addr(0x2222), symbol: "VCAT", trader: addr(0xb006), amountUsd: 500, ts: now() - 700 },
+  { id: "9", kind: "launch", token: addr(0x1111), symbol: "SIG", trader: DEMO_WALLET, amountUsd: 50, ts: now() - 420 },
+  { id: "10", kind: "launch", token: addr(0x2222), symbol: "VCAT", trader: DEMO_WALLET, amountUsd: 100, ts: now() - 3600 },
+  { id: "11", kind: "launch", token: addr(0x5555), symbol: "QUIET", trader: DEMO_WALLET, amountUsd: 25, ts: now() - 1400 },
 ];
 
 export function createDemoToken(input: {
@@ -280,6 +302,7 @@ export function createDemoToken(input: {
     change24h: 0,
     description: input.description || "",
     creatorFeesEarned: f.creator,
+    creatorFeesClaimed: 0,
     platformFeesEarned: f.platform,
     imageHue: hue,
     imageUrl: input.imageUrl || placeholderImage(symbol + address, hue),
