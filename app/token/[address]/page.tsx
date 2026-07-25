@@ -8,11 +8,9 @@ import {
   APP_NAME,
   CHAIN_ID,
   CHAIN_NAME,
-  CREATOR_SHARE_BPS,
   DEMO_MODE,
   FACTORY_ADDRESS,
   GRAD_TARGET,
-  PLATFORM_SHARE_BPS,
   QUOTE_SYMBOL,
   TRADE_FEE_BPS,
   bpsToPct,
@@ -20,19 +18,17 @@ import {
   fmt,
   fmtUsd,
   normalizeUrl,
-  shareToPct,
   shortAddr,
 } from "@/lib/config";
 import {
   DEMO_TOKENS,
   DEMO_WALLET,
   LaunchToken,
-  claimableFees,
   placeholderImage,
 } from "@/lib/demo";
 import { DEPLOYMENT } from "@/lib/deployment";
 import { explorerAddress, loadLiveToken } from "@/lib/onchain";
-import { getTokenMeta, mergeTokenMeta, saveTokenMeta } from "@/lib/tokenMeta";
+import { mergeTokenMeta } from "@/lib/tokenMeta";
 import {
   buyOnCurve,
   connectWallet,
@@ -151,11 +147,6 @@ export default function TokenPage() {
   const [walletBusy, setWalletBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
-  const [metaOpen, setMetaOpen] = useState(false);
-  const [metaDesc, setMetaDesc] = useState("");
-  const [metaWeb, setMetaWeb] = useState("");
-  const [metaX, setMetaX] = useState("");
-  const [metaTg, setMetaTg] = useState("");
 
   const me = (wallet || "").toLowerCase();
 
@@ -179,10 +170,6 @@ export default function TokenPage() {
           } as LaunchToken);
         const merged = mergeTokenMeta(demo) as LaunchToken;
         setToken(merged);
-        setMetaDesc(merged.description || "");
-        setMetaWeb(merged.website || "");
-        setMetaX(merged.twitter || "");
-        setMetaTg(merged.telegram || "");
       } else {
         const t = await loadLiveToken(address);
         if (!t) {
@@ -211,18 +198,10 @@ export default function TokenPage() {
           };
           const merged = mergeTokenMeta(shell) as LaunchToken;
           setToken(merged);
-          setMetaDesc(merged.description || "");
-          setMetaWeb(merged.website || "");
-          setMetaX(merged.twitter || "");
-          setMetaTg(merged.telegram || "");
           setErr("token not indexed on this factory — check address");
         } else {
           const merged = mergeTokenMeta(t) as LaunchToken;
           setToken(merged);
-          setMetaDesc(merged.description || "");
-          setMetaWeb(merged.website || "");
-          setMetaX(merged.twitter || "");
-          setMetaTg(merged.telegram || "");
         }
       }
     } catch (e) {
@@ -424,40 +403,14 @@ export default function TokenPage() {
     }
   }
 
-  function saveMeta() {
-    if (!token) return;
-    saveTokenMeta({
-      address: token.address,
-      name: token.name,
-      symbol: token.symbol,
-      description: metaDesc.trim(),
-      website: metaWeb.trim(),
-      twitter: metaX.trim(),
-      telegram: metaTg.trim(),
-      imageUrl: token.imageUrl,
-    });
-    setToken((prev) =>
-      prev
-        ? {
-            ...prev,
-            description: metaDesc.trim(),
-            website: metaWeb.trim(),
-            twitter: metaX.trim(),
-            telegram: metaTg.trim(),
-          }
-        : prev
-    );
-    setMetaOpen(false);
-    setMsg("token info saved");
-  }
 
   const tradePreview =
     side === "buy"
       ? feeSplit(Number(tradeAmt) || 0)
       : {
           total: quotePreview.fee,
-          creator: quotePreview.fee * (CREATOR_SHARE_BPS / 10000),
-          platform: quotePreview.fee * (PLATFORM_SHARE_BPS / 10000),
+          creator: 0,
+          platform: 0,
         };
 
   return (
@@ -540,9 +493,6 @@ export default function TokenPage() {
                 <span className={`tag ${token.status === "graduated" ? "grad" : "live"}`}>
                   {token.status === "graduated" ? "open" : "launch"}
                 </span>
-                <button type="button" className="btn" onClick={() => setMetaOpen((v) => !v)}>
-                  {metaOpen ? "close" : "edit info"}
-                </button>
               </div>
             </div>
 
@@ -560,44 +510,11 @@ export default function TokenPage() {
               )}
             </div>
 
-            <div className="desc-box">
-              <div className="desc-label">description</div>
-              <p className="desc-text">
-                {token.description?.trim()
-                  ? token.description
-                  : "No description yet. Use edit info to add one."}
-              </p>
-            </div>
-
-            {metaOpen && (
-              <div className="meta-edit card-inset">
-                <div className="field">
-                  <label>description</label>
-                  <textarea
-                    value={metaDesc}
-                    onChange={(e) => setMetaDesc(e.target.value)}
-                    placeholder="What is this token?"
-                  />
-                </div>
-                <div className="two">
-                  <div className="field">
-                    <label>website</label>
-                    <input value={metaWeb} onChange={(e) => setMetaWeb(e.target.value)} placeholder="https://" />
-                  </div>
-                  <div className="field">
-                    <label>x / twitter</label>
-                    <input value={metaX} onChange={(e) => setMetaX(e.target.value)} placeholder="https://x.com/..." />
-                  </div>
-                </div>
-                <div className="field">
-                  <label>telegram</label>
-                  <input value={metaTg} onChange={(e) => setMetaTg(e.target.value)} placeholder="https://t.me/..." />
-                </div>
-                <button className="btn green" type="button" onClick={saveMeta}>
-                  save info
-                </button>
-                <p className="sub" style={{ marginBottom: 0, marginTop: 8 }}>
-                  Stored in this browser for now (not on-chain metadata yet).
+            {(token.description?.trim() || token.website || token.twitter || token.telegram) && (
+              <div className="desc-box">
+                <div className="desc-label">description</div>
+                <p className="desc-text">
+                  {token.description?.trim() || "—"}
                 </p>
               </div>
             )}
@@ -755,14 +672,6 @@ export default function TokenPage() {
                 <span>trade fee ({bpsToPct(TRADE_FEE_BPS)})</span>
                 <b>{fmtUsd(tradePreview.total || quotePreview.fee)}</b>
               </div>
-              <div className="ln">
-                <span>creator cut ({shareToPct(CREATOR_SHARE_BPS)})</span>
-                <b className="up">{fmtUsd(tradePreview.creator)}</b>
-              </div>
-              <div className="ln">
-                <span>platform cut ({shareToPct(PLATFORM_SHARE_BPS)})</span>
-                <b>{fmtUsd(tradePreview.platform)}</b>
-              </div>
             </div>
 
             {!wallet ? (
@@ -795,8 +704,7 @@ export default function TokenPage() {
           {APP_NAME} · {CHAIN_NAME} {CHAIN_ID}
         </span>
         <span>
-          fee {bpsToPct(TRADE_FEE_BPS)} · creator {shareToPct(CREATOR_SHARE_BPS)} · platform{" "}
-          {shareToPct(PLATFORM_SHARE_BPS)} · grad {fmtUsd(GRAD_TARGET)}
+          fee {bpsToPct(TRADE_FEE_BPS)} · Uni V3
         </span>
       </footer>
     </div>

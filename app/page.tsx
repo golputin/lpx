@@ -816,11 +816,6 @@ function HomePageInner() {
             </a>
           )}
           {chainLoading && <span className="pill">sync…</span>}
-          {feeStats.claimable > 0 && wallet && (
-            <button className="pill claim-pill" onClick={() => claimFees()}>
-              claim {fmtUsd(feeStats.claimable)}
-            </button>
-          )}
           <button className="btn" onClick={openProfile}>
             {wallet ? "profile" : "profile"}
           </button>
@@ -845,7 +840,7 @@ function HomePageInner() {
               <div className="v">{stats.launched}</div>
             </div>
             <div className="s">
-              <div className="l">on curve</div>
+              <div className="l">live</div>
               <div className="v">{stats.live}</div>
             </div>
             <div className="s">
@@ -857,8 +852,8 @@ function HomePageInner() {
               <div className="v">{fmtUsd(stats.vol)}</div>
             </div>
             <div className="s">
-              <div className="l">creator fees</div>
-              <div className="v up">{fmtUsd(stats.creatorFees)}</div>
+              <div className="l">pools</div>
+              <div className="v">{stats.launched}</div>
             </div>
           </div>
 
@@ -901,8 +896,7 @@ function HomePageInner() {
                     <th>mcap</th>
                     <th>vol</th>
                     <th>24h</th>
-                    <th>curve</th>
-                    <th>creator fee</th>
+                    <th>depth</th>
                     <th>age</th>
                   </tr>
                 </thead>
@@ -937,17 +931,16 @@ function HomePageInner() {
                             <i style={{ width: `${Math.min(100, t.progress)}%` }} />
                           </div>
                           <div className="cap">
-                            {fmtUsd(t.raised)}/{fmtUsd(GRAD_TARGET)}
+                            {fmtUsd(t.raised)}
                           </div>
                         </div>
                       </td>
-                      <td className="up">{fmtUsd(t.creatorFeesEarned)}</td>
                       <td className="dim">{timeAgo(t.createdAt)}</td>
                     </tr>
                   ))}
                   {filtered.length === 0 && (
                     <tr>
-                      <td colSpan={8}>
+                      <td colSpan={7}>
                         <div className="empty">no tokens</div>
                       </td>
                     </tr>
@@ -1316,29 +1309,10 @@ function HomePageInner() {
                     <b>{fmtUsd(tradePreview.total || quotePreview.fee)}</b>
                   </div>
                   <div className="ln">
-                    <span>creator cut ({shareToPct(CREATOR_SHARE_BPS)})</span>
-                    <b className="up">{fmtUsd(tradePreview.creator)}</b>
-                  </div>
-                  <div className="ln">
-                    <span>platform cut ({shareToPct(PLATFORM_SHARE_BPS)})</span>
-                    <b>{fmtUsd(tradePreview.platform)}</b>
-                  </div>
-                  <div className="ln">
                     <span>creator</span>
                     <b className="mono">{shortAddr(active.creator, 4)}</b>
                   </div>
                 </div>
-
-                {wallet && active.creator.toLowerCase() === me && claimableFees(active) > 0 && (
-                  <button
-                    className="btn green block"
-                    style={{ marginTop: 8 }}
-                    disabled={claimBusy === active.address || claimBusy === "all"}
-                    onClick={() => claimFees(active.address)}
-                  >
-                    {claimBusy === active.address ? "claiming…" : `claim ${fmtUsd(claimableFees(active))}`}
-                  </button>
-                )}
 
                 {!wallet ? (
                   <button
@@ -1521,7 +1495,7 @@ function HomePageInner() {
                       })}
                       {myLaunches.length === 0 && (
                         <tr>
-                          <td colSpan={8}>
+                          <td colSpan={7}>
                             <div className="empty">
                               no launches yet ·{" "}
                               <button className="btn green" onClick={() => setTab("create")}>
