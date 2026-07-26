@@ -1382,11 +1382,11 @@ function HomePageInner() {
               </div>
             </div>
             <div className="note">
-              <b>Biaya create:</b> platform <b>$0</b>. Cuma gas network (~
-              <b>{fmtUsd(CREATE_GAS_EST_USD)}</b> di Stable, gas ~1 gwei). First buy opsional — itu modal
-              beli, bukan fee. Trade fee tetap 1% · creator 80% / platform 20%.
+              <b>Create cost:</b> platform fee <b>$0</b>. You only pay network gas (~
+              <b>{fmtUsd(CREATE_GAS_EST_USD)}</b> on Stable at ~1 gwei). First buy is optional —
+              that is buy capital, not a fee. Trade fee stays at 1% · creator 80% / platform 20%.
               <br />
-              example volume <b>$10,000</b> → fee <b>$100</b> → creator <b>$80</b> · platform <b>$20</b>
+              Example volume <b>$10,000</b> → fee <b>$100</b> → creator <b>$80</b> · platform <b>$20</b>
             </div>
           </div>
         </div>
