@@ -160,6 +160,7 @@ function SocialLinks({
 function HomePageInner() {
   const [tab, setTab] = useState<Tab>("explore");
   const [filter, setFilter] = useState<Filter>("all");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [q, setQ] = useState("");
   const [wallet, setWallet] = useState<string | null>(null);
   const [tokens, setTokens] = useState<LaunchToken[]>(DEMO_MODE ? DEMO_TOKENS : []);
@@ -868,28 +869,51 @@ function HomePageInner() {
 
       {tab === "explore" && (
         <>
-          <div className="strip">
-            <div className="s">
-              <div className="l">launched</div>
-              <div className="v">{stats.launched}</div>
+          <section className="cmd-strip">
+            <div className="cmd-main">
+              <div className="cmd-kicker">
+                <i /> radar desk · {CHAIN_NAME} {CHAIN_ID}
+              </div>
+              <h1>
+                Scan live pools. <em>Trade from block zero.</em>
+              </h1>
+              <p>
+                Instant Uni V3 liquidity · 1% fee · creator {shareToPct(CREATOR_SHARE_BPS)} / platform{" "}
+                {shareToPct(PLATFORM_SHARE_BPS)} · no bonding curve, no migrate wait.
+              </p>
+              <div className="cmd-actions">
+                <button className="btn green" onClick={() => setTab("create")}>
+                  + launch token
+                </button>
+                <button className="btn" onClick={() => setFilter("newest")}>
+                  newest first
+                </button>
+                {!wallet && (
+                  <button className="btn" onClick={connect} disabled={walletBusy}>
+                    {walletBusy ? "connecting…" : "connect wallet"}
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="s">
-              <div className="l">live</div>
-              <div className="v">{stats.live}</div>
+            <div className="cmd-side">
+              <div className="cmd-stat">
+                <div className="l">launched</div>
+                <div className="v">{stats.launched}</div>
+              </div>
+              <div className="cmd-stat">
+                <div className="l">live</div>
+                <div className="v accent">{stats.live}</div>
+              </div>
+              <div className="cmd-stat">
+                <div className="l">vol 24h</div>
+                <div className="v">{fmtUsd(stats.vol)}</div>
+              </div>
+              <div className="cmd-stat">
+                <div className="l">graduated</div>
+                <div className="v">{stats.graduated}</div>
+              </div>
             </div>
-            <div className="s">
-              <div className="l">graduated</div>
-              <div className="v">{stats.graduated}</div>
-            </div>
-            <div className="s">
-              <div className="l">vol 24h</div>
-              <div className="v">{fmtUsd(stats.vol)}</div>
-            </div>
-            <div className="s">
-              <div className="l">pools</div>
-              <div className="v">{stats.launched}</div>
-            </div>
-          </div>
+          </section>
 
           <div className="bar">
             <div className="filters">
@@ -908,6 +932,22 @@ function HomePageInner() {
                 </button>
               ))}
             </div>
+            <div className="view-toggle" role="group" aria-label="view mode">
+              <button
+                type="button"
+                className={viewMode === "cards" ? "on" : ""}
+                onClick={() => setViewMode("cards")}
+              >
+                cards
+              </button>
+              <button
+                type="button"
+                className={viewMode === "table" ? "on" : ""}
+                onClick={() => setViewMode("table")}
+              >
+                table
+              </button>
+            </div>
             <div className="search">
               <input
                 placeholder="search token / ca"
@@ -921,67 +961,147 @@ function HomePageInner() {
           </div>
 
           <div className="main">
-            <div className="table-wrap scrollx">
-              <table className="tokens">
-                <thead>
-                  <tr>
-                    <th>token</th>
-                    <th>status</th>
-                    <th>mcap</th>
-                    <th>vol</th>
-                    <th>24h</th>
-                    <th>depth</th>
-                    <th>age</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((t) => (
-                    <tr key={t.address} onClick={() => openToken(t.address)}>
-                      <td>
-                        <div className="tok">
-                          <TokenAvatar token={t} />
+            {viewMode === "cards" ? (
+              <div className="card-grid">
+                {filtered.map((t) => {
+                  const isNew = Date.now() / 1000 - t.createdAt < 3600;
+                  return (
+                    <button
+                      type="button"
+                      key={t.address}
+                      className="token-card"
+                      onClick={() => openToken(t.address)}
+                    >
+                      <div className="art">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        {t.imageUrl ? (
+                          <img
+                            src={t.imageUrl}
+                            alt=""
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className="fallback"
+                          style={{
+                            background: `radial-gradient(circle at 30% 20%, hsla(${
+                              t.imageHue || 160
+                            }, 55%, 42%, 0.28), transparent 55%), linear-gradient(160deg, #121820, #0a0d12)`,
+                          }}
+                        >
+                          {t.symbol.slice(0, 3)}
+                        </div>
+                        <div className="badge-row">
+                          <span className={`tag ${t.status === "graduated" ? "grad" : "live"}`}>
+                            {t.status === "graduated" ? "grad" : "live"}
+                          </span>
+                          {isNew && <span className="tag new">new</span>}
+                        </div>
+                      </div>
+                      <div className="body">
+                        <div className="title-row">
                           <div>
                             <div className="n">{t.name}</div>
                             <div className="m">
                               ${t.symbol} · {shortAddr(t.address, 3)}
                             </div>
                           </div>
+                          <div className={`chg ${t.change24h >= 0 ? "up" : "dn"}`}>
+                            {t.change24h >= 0 ? "▲" : "▼"} {Math.abs(t.change24h).toFixed(1)}%
+                          </div>
                         </div>
-                      </td>
-                      <td>
-                        <span className={`tag ${t.status === "graduated" ? "grad" : "live"}`}>
-                          {t.status === "graduated" ? "grad" : "live"}
-                        </span>
-                      </td>
-                      <td>{fmtUsd(t.mcap)}</td>
-                      <td>{fmtUsd(t.vol24h)}</td>
-                      <td className={t.change24h >= 0 ? "up" : "dn"}>
-                        {t.change24h >= 0 ? "+" : ""}
-                        {t.change24h.toFixed(1)}%
-                      </td>
-                      <td>
+                        <div className="meta-row">
+                          <div>
+                            <div className="l">mcap</div>
+                            <div className="v">{fmtUsd(t.mcap)}</div>
+                          </div>
+                          <div>
+                            <div className="l">vol</div>
+                            <div className="v">{fmtUsd(t.vol24h)}</div>
+                          </div>
+                        </div>
                         <div className="prog">
                           <div className="track">
                             <i style={{ width: `${Math.min(100, t.progress)}%` }} />
                           </div>
                           <div className="cap">
-                            {fmtUsd(t.raised)}
+                            depth {fmtUsd(t.raised)} · {timeAgo(t.createdAt)}
                           </div>
                         </div>
-                      </td>
-                      <td className="dim">{timeAgo(t.createdAt)}</td>
-                    </tr>
-                  ))}
-                  {filtered.length === 0 && (
+                      </div>
+                    </button>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <div className="empty" style={{ gridColumn: "1 / -1" }}>
+                    <b>no tokens in radar</b>
+                    {chainLoading ? "syncing factory…" : "try another filter or launch the first one"}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="table-wrap scrollx">
+                <table className="tokens">
+                  <thead>
                     <tr>
-                      <td colSpan={7}>
-                        <div className="empty">no tokens</div>
-                      </td>
+                      <th>token</th>
+                      <th>status</th>
+                      <th>mcap</th>
+                      <th>vol</th>
+                      <th>24h</th>
+                      <th>depth</th>
+                      <th>age</th>
                     </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filtered.map((t) => (
+                      <tr key={t.address} onClick={() => openToken(t.address)}>
+                        <td>
+                          <div className="tok">
+                            <TokenAvatar token={t} />
+                            <div>
+                              <div className="n">{t.name}</div>
+                              <div className="m">
+                                ${t.symbol} · {shortAddr(t.address, 3)}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`tag ${t.status === "graduated" ? "grad" : "live"}`}>
+                            {t.status === "graduated" ? "grad" : "live"}
+                          </span>
+                        </td>
+                        <td>{fmtUsd(t.mcap)}</td>
+                        <td>{fmtUsd(t.vol24h)}</td>
+                        <td className={t.change24h >= 0 ? "up" : "dn"}>
+                          {t.change24h >= 0 ? "+" : ""}
+                          {t.change24h.toFixed(1)}%
+                        </td>
+                        <td>
+                          <div className="prog">
+                            <div className="track">
+                              <i style={{ width: `${Math.min(100, t.progress)}%` }} />
+                            </div>
+                            <div className="cap">{fmtUsd(t.raised)}</div>
+                          </div>
+                        </td>
+                        <td className="dim">{timeAgo(t.createdAt)}</td>
+                      </tr>
+                    ))}
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td colSpan={7}>
+                          <div className="empty">no tokens</div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             <aside className="side">
               <h3>activity · buy / sell</h3>
