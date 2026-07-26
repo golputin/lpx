@@ -162,6 +162,63 @@ body::before {
   background: var(--panel);
 }
 .ticker-x:hover { color: var(--text); border-color: var(--line2); }
+.ticker-idle {
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--dim);
+  letter-spacing: 0.02em;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+/* ── loading skeleton (live mode, no demo data) ── */
+.sk-block {
+  background: linear-gradient(90deg, #10151e 0%, #182031 50%, #10151e 100%);
+  background-size: 200% 100%;
+  animation: sk-shine 1.2s ease-in-out infinite;
+  border-radius: 8px;
+}
+.sk-line {
+  height: 10px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #10151e 0%, #182031 50%, #10151e 100%);
+  background-size: 200% 100%;
+  animation: sk-shine 1.2s ease-in-out infinite;
+  margin: 6px 0;
+}
+.sk-line.w40 { width: 40%; }
+.sk-line.w50 { width: 50%; }
+.sk-line.w60 { width: 60%; }
+.sk-line.w70 { width: 70%; }
+.sk-line.w80 { width: 80%; }
+.sk-line.w90 { width: 90%; }
+.sk-block.h36 { height: 36px; }
+.skeleton-card {
+  pointer-events: none;
+  cursor: default;
+}
+.skeleton-card:hover {
+  transform: none;
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+.skeleton-card .art.sk-block {
+  aspect-ratio: 1.15 / 1;
+  border-radius: 0;
+}
+.skeleton-row td { padding: 16px 12px; }
+.feed-loading {
+  padding: 14px 12px;
+  display: grid;
+  gap: 10px;
+}
+@keyframes sk-shine {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-block, .sk-line { animation: none; }
+}
 
 /* ── top bar ── */
 .top {

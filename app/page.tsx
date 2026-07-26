@@ -782,27 +782,38 @@ function HomePageInner() {
     () => activity.filter((a) => a.kind === "buy" || a.kind === "sell").slice(0, 40),
     [activity]
   );
-  const tickerItems = tradeFeed.length ? tradeFeed : DEMO_ACTIVITY;
+  // Live mode: never fall back to DEMO_ACTIVITY while RPC is still loading.
+  const tickerItems = tradeFeed.length
+    ? tradeFeed
+    : DEMO_MODE
+      ? DEMO_ACTIVITY
+      : [];
 
   return (
     <div className="app">
       <div className="ticker-wrap" aria-label="live trades">
         <div className="ticker-label">LIVE</div>
         <div className="ticker-mask">
-          <div className="ticker-track">
-            {[...tickerItems, ...tickerItems].map((a, i) => (
-              <button
-                type="button"
-                key={`${a.id}-${i}`}
-                className={`ticker-item ${a.kind}`}
-                onClick={() => openToken(a.token)}
-              >
-                <span className="tk">{a.kind.toUpperCase()}</span>
-                <span className="sym">${a.symbol}</span>
-                <span className="amt">{a.amountUsd > 0 ? fmtUsd(a.amountUsd) : ""}</span>
-              </button>
-            ))}
-          </div>
+          {tickerItems.length > 0 ? (
+            <div className="ticker-track">
+              {[...tickerItems, ...tickerItems].map((a, i) => (
+                <button
+                  type="button"
+                  key={`${a.id}-${i}`}
+                  className={`ticker-item ${a.kind}`}
+                  onClick={() => openToken(a.token)}
+                >
+                  <span className="tk">{a.kind.toUpperCase()}</span>
+                  <span className="sym">${a.symbol}</span>
+                  <span className="amt">{a.amountUsd > 0 ? fmtUsd(a.amountUsd) : ""}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="ticker-idle">
+              {chainLoading ? "loading live feed…" : "waiting for first trades"}
+            </div>
+          )}
         </div>
         <a className="ticker-x" href={TWITTER_URL} target="_blank" rel="noreferrer" title="Twitter">
           @{TWITTER_HANDLE}
@@ -961,7 +972,51 @@ function HomePageInner() {
           </div>
 
           <div className="main">
-            {viewMode === "cards" ? (
+            {chainLoading && filtered.length === 0 ? (
+              viewMode === "cards" ? (
+                <div className="card-grid" aria-busy="true" aria-label="loading tokens">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="token-card skeleton-card">
+                      <div className="art sk-block" />
+                      <div className="body">
+                        <div className="sk-line w60" />
+                        <div className="sk-line w40" />
+                        <div className="meta-row">
+                          <div className="sk-block h36" />
+                          <div className="sk-block h36" />
+                        </div>
+                        <div className="sk-line w80" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="table-wrap scrollx" aria-busy="true">
+                  <table className="tokens">
+                    <thead>
+                      <tr>
+                        <th>token</th>
+                        <th>status</th>
+                        <th>mcap</th>
+                        <th>vol</th>
+                        <th>24h</th>
+                        <th>depth</th>
+                        <th>age</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <tr key={i} className="skeleton-row">
+                          <td colSpan={7}>
+                            <div className="sk-line w90" />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : viewMode === "cards" ? (
               <div className="card-grid">
                 {filtered.map((t) => {
                   const isNew = Date.now() / 1000 - t.createdAt < 3600;
@@ -1037,7 +1092,7 @@ function HomePageInner() {
                 {filtered.length === 0 && (
                   <div className="empty" style={{ gridColumn: "1 / -1" }}>
                     <b>no tokens in radar</b>
-                    {chainLoading ? "syncing factory…" : "try another filter or launch the first one"}
+                    try another filter or launch the first one
                   </div>
                 )}
               </div>
@@ -1106,6 +1161,18 @@ function HomePageInner() {
             <aside className="side">
               <h3>activity · buy / sell</h3>
               <div className="feed">
+                {chainLoading && tradeFeed.length === 0 && (
+                  <div className="feed-loading">
+                    <div className="sk-line w70" />
+                    <div className="sk-line w50" />
+                    <div className="sk-line w60" />
+                  </div>
+                )}
+                {!chainLoading && tradeFeed.length === 0 && (
+                  <div className="empty" style={{ margin: 12, border: 0 }}>
+                    no trades yet
+                  </div>
+                )}
                 {tradeFeed.slice(0, 24).map((a) => {
                   const tok = tokens.find((t) => t.address === a.token);
                   return (
