@@ -13,7 +13,6 @@ import {
   CHAIN_NAME,
   DEMO_MODE,
   FACTORY_ADDRESS,
-  GRAD_TARGET,
   QUOTE_SYMBOL,
   TRADE_FEE_BPS,
   bpsToPct,
@@ -502,20 +501,6 @@ export default function TokenPage() {
                   {token.status === "graduated" ? "open" : "launch"}
                 </span>
               </div>
-            </div>
-
-            <div className={`status-banner ${token.status === "graduated" ? "ok" : "ok"}`}>
-              {token.status === "graduated" ? (
-                <>
-                  <b>Open market</b> — trading on Uniswap V3.
-                </>
-              ) : (
-                <>
-                  <b>Uni V3 pool live</b> — sniper / BasedBot ready from block 0.
-                  Fee tier <b>1%</b> · start mcap ~{fmtUsd(GRAD_TARGET)}. Trade here or via any V3
-                  router.
-                </>
-              )}
             </div>
 
             {(token.description?.trim() || token.website || token.twitter || token.telegram) && (
